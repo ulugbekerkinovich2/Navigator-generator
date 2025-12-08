@@ -40,7 +40,7 @@
                 <input
                   id="start-text"
                   type="text"
-                  placeholder="Example: Reliable Rebar, 224 Capital Lane, Rhome, TX 76078"
+                  placeholder="e.g. Reliable Rebar, 224 Capital Lane, Rhome, TX"
                   class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
                 />
               </div>
@@ -52,15 +52,30 @@
                 <input
                   id="end-text"
                   type="text"
-                  placeholder="Example: Boone, CO"
+                  placeholder="e.g. Boone, CO"
                   class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-purple-500/70"
                 />
               </div>
 
               <p class="text-[11px] text-slate-500">
-                If you don’t know the exact addresses, you can just upload the permit PDFs —
-                the AI will detect pickup and delivery for you.
+                If you don't know the exact addresses, you can just upload the permits — the AI will detect pickup and delivery for you.
               </p>
+            </div>
+
+            <!-- Travel mode -->
+            <div class="space-y-2">
+              <label class="block text-xs font-medium text-slate-300 mb-1">
+                Travel mode
+              </label>
+              <select
+                id="travel-mode"
+                class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
+              >
+                <option value="driving">Driving (default)</option>
+                <option value="walking">Walking</option>
+                <option value="bicycling">Bicycling</option>
+                <option value="transit">Transit</option>
+              </select>
             </div>
 
             <!-- Single upload for ALL permits -->
@@ -204,6 +219,7 @@
   <script>
     const startTextInput = document.getElementById("start-text");
     const endTextInput = document.getElementById("end-text");
+    const travelModeSelect = document.getElementById("travel-mode");
     const permitsInput = document.getElementById("permits");
     const permitsLabel = document.getElementById("permits-label");
 
@@ -230,7 +246,7 @@
       } else if (permitsInput.files.length === 1) {
         permitsLabel.textContent = permitsInput.files[0].name;
       } else {
-        permitsLabel.textContent = permitsInput.files.length + " PDFs selected";
+        permitsLabel.textContent = `${permitsInput.files.length} PDF files selected`;
       }
     });
 
@@ -240,15 +256,29 @@
       btnSpinner.classList.toggle("hidden", !isLoading);
     }
 
+    function extractErrorMessage(data) {
+      if (!data) return "Unknown server error.";
+      if (typeof data === "string") return data;
+      if (data.detail) {
+        if (typeof data.detail === "string") return data.detail;
+        if (Array.isArray(data.detail)) {
+          return data.detail.map(d => d.msg || JSON.stringify(d)).join(" | ");
+        }
+        return JSON.stringify(data.detail);
+      }
+      return JSON.stringify(data);
+    }
+
     async function handleSubmit() {
       errorBox.classList.add("hidden");
       errorBox.textContent = "";
 
       const start = startTextInput.value.trim();
       const end = endTextInput.value.trim();
+      const travelMode = travelModeSelect.value;
 
       if (!permitsInput.files.length && !(start && end)) {
-        errorBox.textContent = "Please provide at least one permit PDF or both starting and destination addresses.";
+        errorBox.textContent = "Provide at least one permit PDF or both starting and destination addresses.";
         errorBox.classList.remove("hidden");
         return;
       }
@@ -256,6 +286,7 @@
       const formData = new FormData();
       formData.append("start_address", start);
       formData.append("end_address", end);
+      formData.append("travel_mode", travelMode);
 
       Array.from(permitsInput.files).forEach((file) => {
         formData.append("permits", file);
@@ -264,16 +295,16 @@
       setLoading(true);
 
       try {
-        // Adjust URL if backend is on a different domain
+        // Use your backend domain here
         const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
-          // Or: const res = await fetch("/api/generate-navigation-link", { ... })
+        // const res = await fetch("http://localhost:8003/api/generate-navigation-link", {
           method: "POST",
           body: formData,
         });
 
         const raw = await res.text();
         if (!raw) {
-          throw new Error("Server returned an empty response.");
+          throw new Error("The server returned an empty response.");
         }
 
         let data;
@@ -281,11 +312,11 @@
           data = JSON.parse(raw);
         } catch (e) {
           console.error("JSON parse error, raw:", raw);
-          throw new Error("Server did not return valid JSON.");
+          throw new Error("The server did not return valid JSON.");
         }
 
         if (!res.ok || !data.success) {
-          throw new Error(data.detail || "Server error");
+          throw new Error(extractErrorMessage(data));
         }
 
         originText.textContent = data.origin || "-";
@@ -307,7 +338,7 @@
         }
       } catch (err) {
         console.error(err);
-        errorBox.textContent = err.message || "An unknown error occurred.";
+        errorBox.textContent = err.message || "Unknown error occurred.";
         errorBox.classList.remove("hidden");
       } finally {
         setLoading(false);
