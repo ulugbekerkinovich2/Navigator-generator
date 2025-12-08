@@ -1,115 +1,149 @@
 import os
 import json
 import base64
-from typing import List
+from typing import List, Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# .env ichida:
-# GEMINI_API_KEY=.....  (bu yerda haqiqiy kalit turadi)
+# ========== GEMINI API KEY ==========
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    raise Exception("GEMINI_API_KEY environment variable topilmadi yoki to'ldirilmagan!")
+    raise Exception("GEMINI_API_KEY environment variable is missing!")
 
-# v1 + gemini-2.0-flash
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent"
+# v1 API + gemini-2.0-flash modeli
+GEMINI_API_URL = (
+    "https://generativelanguage.googleapis.com/v1/models/"
+    "gemini-2.0-flash:generateContent"
+)
 
-app = FastAPI(title="Gemini Permit Navigation API (hints + multi-PDF)")
+# ========== FASTAPI ==========
+
+app = FastAPI(title="Gemini (REST) Permit Navigation API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # demo uchun ochiq
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-def pdf_to_base64(file_bytes: bytes) -> str:
-    return base64.b64encode(file_bytes).decode("utf-8")
-
+# ========== UTIL ==========
 
 def build_google_maps_link(origin: str, destination: str) -> str:
     params = {"api": "1", "origin": origin, "destination": destination}
     return f"https://www.google.com/maps/dir/?{urlencode(params)}"
 
 
-async def ask_gemini_with_pdfs_and_hints(
+def pdf_to_base64(file_bytes: bytes) -> str:
+    return base64.b64encode(file_bytes).decode("utf-8")
+
+
+async def ask_gemini_with_pdfs(
     start_address: str,
     end_address: str,
-    permits: List[UploadFile],
+    permits: Optional[List[UploadFile]],
 ) -> dict:
-    # PDF -> inlineData (base64)
+    """
+    Variantlar:
+    - Agar permits bo'lmasa → faqat user yozgan addresslardan foydalanamiz (Gemini yo'q).
+    - Agar permits bo'lsa → Gemini PDFlarni o'qib, origin/destination ni aniqlaydi.
+    """
+
+    permits = permits or []
+    start_address = (start_address or "").strip()
+    end_address = (end_address or "").strip()
+
+    # 1) Hech qanday PDF yo'q – faqat adres bilan ishlash
+    if not permits:
+        if not (start_address and end_address):
+            raise HTTPException(
+                400,
+                "Provide at least one permit PDF or both starting and destination addresses.",
+            )
+
+        return {
+            "origin": start_address,
+            "destination": end_address,
+            "notes": "No permits uploaded. Used user-provided addresses directly.",
+        }
+
+    # 2) PDFlar bor – Gemini bilan ishlaymiz
     inline_parts = []
     for permit in permits:
         content = await permit.read()
         if not content:
             continue
-        inline_parts.append({
-            "inlineData": {
-                "data": pdf_to_base64(content),
-                "mimeType": "application/pdf",
-            }
-        })
 
-    # Agar PDF ham, hint ham yo'q bo'lsa – umuman ma'lumot yo'q
-    if not inline_parts and not (start_address and end_address):
-        raise HTTPException(
-            400,
-            "Hech bo'lmaganda 1 ta permit PDF yoki ikkala adresni to'liq kiriting.",
+        inline_parts.append(
+            {
+                "inlineData": {
+                    "data": pdf_to_base64(content),
+                    "mimeType": "application/pdf",
+                }
+            }
         )
 
+    if not inline_parts:
+        # Fayllar bo'sh bo'lsa ham fallback – faqat adreslardan foydalanamiz
+        if not (start_address and end_address):
+            raise HTTPException(
+                400,
+                "Permit files are empty and addresses are missing. "
+                "Provide at least addresses or valid PDFs.",
+            )
+
+        return {
+            "origin": start_address,
+            "destination": end_address,
+            "notes": "Permit files were empty. Used user-provided addresses.",
+        }
+
+    # Gemini prompt – adreslar ham kontekst sifatida beriladi
     prompt = f"""
 You are a senior logistics & dispatch assistant.
 
-You receive multiple permit PDFs for a SINGLE load (rate confirmation, TX permit, CO permit, etc.).
-Each PDF may contain:
-- PU / PICKUP / ORIGIN info
-- DEL / DELIVERY / DESTINATION info
-- addresses, cities, states, dates, highways.
+You receive multiple permit PDF files (rate confirmation, TX PERMIT, CO PERMIT, etc.).
+Each permit may contain load info: PU (pickup), ORIGIN, PICKUP, DEL (delivery),
+DESTINATION, addresses, cities, and dates.
 
-The user may also give optional hint addresses.
+User input (optional):
+- Starting address: "{start_address or "not provided"}"
+- Destination address: "{end_address or "not provided"}"
 
-User hints:
-- starting_address_hint: "{start_address or "[none]"}"
-- destination_address_hint: "{end_address or "[none]"}"
-
-Your tasks:
-1) Read ALL PDFs together as ONE load (if any PDFs are attached).
-2) Use the hints if they are useful, but the permits are the source of truth.
-3) Decide final Google-Maps-friendly origin and destination:
-   - city + state or full address that works well in Google Maps search.
-   - If permits say things like "5.0mi SE of SH114 & FM 718"
-     or "2.8mi from BOONE", convert them into the nearest town/city + state
-     (e.g. "Rhome, TX" or "Boone, CO") instead of raw highway text.
-4) If there are NO PDFs but user hints are present, just use the hints.
-
-Return ONLY raw JSON in exactly this structure:
+Your task:
+1) Read ALL PDFs together as ONE load.
+2) Determine the pickup CITY/ADDRESS and STATE where the driver starts.
+3) Determine the delivery CITY/ADDRESS and STATE where the driver finishes.
+4) If only highway references like "5.0mi SE of SH114 & FM 718" or "2.8mi from BOONE"
+   are given, convert them into a nearest town/city + state (e.g. "Rhome, TX", "Boone, CO").
+5) If the user-provided addresses look correct, you may keep them or slightly refine them.
+6) Respond ONLY raw JSON:
 
 {{
-  "origin": "<origin text for Google Maps>",
-  "destination": "<destination text for Google Maps>",
-  "notes": "short explanation of how you chose them"
+  "origin": "<Google Maps friendly query: city/state or address>",
+  "destination": "<Google Maps friendly query: city/state or address>",
+  "notes": "short explanation"
 }}
 
-NO markdown.
-NO code fences.
-NO extra keys.
+No markdown. No extra keys.
 """
-
-    parts = [{"text": prompt}]
-    parts.extend(inline_parts)
 
     payload = {
         "contents": [
             {
                 "role": "user",
-                "parts": parts,
+                "parts": [
+                    {"text": prompt},
+                    *inline_parts,
+                ],
             }
         ]
     }
@@ -126,11 +160,10 @@ NO extra keys.
         resp_json = r.json()
         raw_text = resp_json["candidates"][0]["content"]["parts"][0]["text"]
     except Exception:
-        raise HTTPException(500, f"Gemini javob formati noto'g'ri: {r.text}")
+        raise HTTPException(500, f"Gemini response format is invalid: {r.text}")
 
+    # --- Cleanup: strip ```json ... ``` etc. ---
     text = raw_text.strip()
-
-    # Agar baribir ```json ... ``` tashlab yuborsa – tozalaymiz
     if text.startswith("```"):
         lines = text.splitlines()
         if lines and lines[0].startswith("```"):
@@ -139,41 +172,41 @@ NO extra keys.
             lines = lines[:-1]
         text = "\n".join(lines).strip()
 
-    # Faqat { ... } orasini ajratib olamiz
-    start_idx = text.find("{")
-    end_idx = text.rfind("}")
-    if start_idx != -1 and end_idx != -1:
-        text = text[start_idx:end_idx + 1].strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1:
+        text = text[start : end + 1].strip()
 
     try:
         data = json.loads(text)
     except Exception:
-        raise HTTPException(500, f"Gemini JSON formatida qaytarmadi: {text}")
+        raise HTTPException(500, f"Gemini did not return valid JSON: {text}")
 
     return data
 
+
+# ========== API ROUTE ==========
 
 @app.post("/api/generate-navigation-link")
 async def generate(
     start_address: str = Form(""),
     end_address: str = Form(""),
-    permits: List[UploadFile] = File(...),  # bitta input, ichiga 4–5 ta PDF
+    permits: Optional[List[UploadFile]] = File(None),
 ):
-    # front orqali kamida 1 ta PDF talab qilamiz, lekin baribir chek:
-    if not permits and not (start_address and end_address):
-        raise HTTPException(
-            400,
-            "Hech bo'lmaganda 1 ta permit PDF yoki ikkala adresni to'liq kiriting.",
-        )
+    """
+    Frontend yuboradigan forma:
+    - start_address (optional text)
+    - end_address (optional text)
+    - permits (0..N ta PDF)
+    """
+    data = await ask_gemini_with_pdfs(start_address, end_address, permits)
 
-    data = await ask_gemini_with_pdfs_and_hints(start_address, end_address, permits)
-
-    origin = (data.get("origin") or start_address).strip()
-    destination = (data.get("destination") or end_address).strip()
+    origin = (data.get("origin") or "").strip()
+    destination = (data.get("destination") or "").strip()
     notes = (data.get("notes") or "").strip()
 
     if not origin or not destination:
-        raise HTTPException(500, f"Gemini pickup/delivery topa olmadi: {data}")
+        raise HTTPException(500, f"Could not determine origin/destination: {data}")
 
     link = build_google_maps_link(origin, destination)
 
