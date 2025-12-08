@@ -19,7 +19,7 @@
               Permit Navigation Link Generator
             </h1>
             <p class="mt-1 text-sm text-slate-400">
-              Starting / Destination — address yoki permit PDF → Google Maps navigation link.
+              Starting / Destination — address (optional) + permit PDF’lar → Google Maps navigation link.
             </p>
           </div>
           <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 border border-emerald-500/40">
@@ -31,102 +31,71 @@
         <div class="grid md:grid-cols-2 gap-6 flex-1">
           <!-- FORM -->
           <section class="space-y-4">
-            <div class="space-y-4">
-              <!-- Starting permit + text -->
-              <div class="border border-dashed border-slate-600 rounded-xl p-4 bg-slate-900/60">
-                <label
-                  for="start-file"
-                  class="flex flex-col items-center justify-center gap-2 cursor-pointer text-center"
-                >
-                  <div class="flex items-center justify-center w-10 h-10 rounded-full bg-blue-500/20 text-blue-300 mb-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                         viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0L8 12m4-4v12" />
-                    </svg>
-                  </div>
-                  <p class="text-sm font-medium">
-                    Upload <span class="text-blue-300">Starting permit</span> (PDF, optional)
-                  </p>
-                  <p class="text-xs text-slate-400">
-                    Masalan: TX PERMIT (pickup / origin uchun).
-                  </p>
-                  <input
-                    id="start-file"
-                    type="file"
-                    class="hidden"
-                    accept="application/pdf"
-                  />
-                  <p id="start-file-label" class="mt-2 text-xs text-slate-400">
-                    Hozircha fayl tanlanmagan
-                  </p>
+            <!-- Address inputs -->
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">
+                  Starting address (optional)
                 </label>
-
-                <!-- Starting text address (optional) -->
-                <div class="mt-3 w-full text-left">
-                  <label class="block text-xs font-medium text-slate-300 mb-1">
-                    Starting address (optional)
-                  </label>
-                  <input
-                    id="start-text"
-                    type="text"
-                    placeholder="Masalan: Reliable Rebar, 224 Capital Lane, Rhome, TX"
-                    class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
-                  />
-                  <p class="mt-1 text-[11px] text-slate-500">
-                    Agar PDF bo‘lsa – PDF ustun bo‘ladi, bo‘lmasa shu adresdan foydalaniladi.
-                  </p>
-                </div>
+                <input
+                  id="start-text"
+                  type="text"
+                  placeholder="Masalan: Reliable Rebar, 224 Capital Lane, Rhome, TX"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
+                />
               </div>
 
-              <!-- Destination permit + text -->
-              <div class="border border-dashed border-slate-600 rounded-xl p-4 bg-slate-900/60">
-                <label
-                  for="end-file"
-                  class="flex flex-col items-center justify-center gap-2 cursor-pointer text-center"
-                >
-                  <div class="flex items-center justify-center w-10 h-10 rounded-full bg-purple-500/20 text-purple-300 mb-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                         viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                            d="M12 5v14m0 0l-5-5m5 5l5-5" />
-                    </svg>
-                  </div>
-                  <p class="text-sm font-medium">
-                    Upload <span class="text-purple-300">Destination permit</span> (PDF, optional)
-                  </p>
-                  <p class="text-xs text-slate-400">
-                    Masalan: CO PERMIT (delivery / destination uchun).
-                  </p>
-                  <input
-                    id="end-file"
-                    type="file"
-                    class="hidden"
-                    accept="application/pdf"
-                  />
-                  <p id="end-file-label" class="mt-2 text-xs text-slate-400">
-                    Hozircha fayl tanlanmagan
-                  </p>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">
+                  Destination address (optional)
                 </label>
-
-                <!-- Destination text address (optional) -->
-                <div class="mt-3 w-full text-left">
-                  <label class="block text-xs font-medium text-slate-300 mb-1">
-                    Destination address (optional)
-                  </label>
-                  <input
-                    id="end-text"
-                    type="text"
-                    placeholder="Masalan: Boone, CO"
-                    class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-purple-500/70"
-                  />
-                  <p class="mt-1 text-[11px] text-slate-500">
-                    Agar PDF bo‘lsa – PDF ustun bo‘ladi, bo‘lmasa shu adresdan foydalaniladi.
-                  </p>
-                </div>
+                <input
+                  id="end-text"
+                  type="text"
+                  placeholder="Masalan: Boone, CO"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-purple-500/70"
+                />
               </div>
+
+              <p class="text-[11px] text-slate-500">
+                Agar adreslarni bilmasangiz, faqat permit PDF’larni yuklasangiz ham bo‘ladi —
+                AI pickup/delivery ni o‘zi topadi.
+              </p>
             </div>
 
+            <!-- Single upload for ALL permits -->
+            <div class="border border-dashed border-slate-600 rounded-xl p-4 bg-slate-900/60">
+              <label
+                for="permits"
+                class="flex flex-col items-center justify-center gap-2 cursor-pointer text-center"
+              >
+                <div class="flex items-center justify-center w-10 h-10 rounded-full bg-blue-500/20 text-blue-300 mb-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                       viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0L8 12m4-4v12" />
+                  </svg>
+                </div>
+                <p class="text-sm font-medium">
+                  Upload <span class="text-blue-300">permits</span> (PDF, multi)
+                </p>
+                <p class="text-xs text-slate-400">
+                  Rate con, TX PERMIT, CO PERMIT va boshqa fayllarni bir joyga tashlang (4–5 ta bo‘lishi mumkin).
+                </p>
+                <input
+                  id="permits"
+                  type="file"
+                  class="hidden"
+                  accept="application/pdf"
+                  multiple
+                />
+                <p id="permits-label" class="mt-2 text-xs text-slate-400">
+                  Hozircha fayl tanlanmagan
+                </p>
+              </label>
+            </div>
+
+            <!-- Submit -->
             <button
               id="submit-btn"
               class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors px-4 py-2.5 text-sm font-semibold shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -189,7 +158,7 @@
                          viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"
                             d="M13 5h6m0 0v6m0-6L10 14" />
-                      </svg>
+                    </svg>
                   </a>
 
                   <button
@@ -205,7 +174,7 @@
         </div>
 
         <footer class="mt-4 text-[11px] text-slate-500 text-right">
-          Built for the “Programming estafeta” – starting / destination → navigation link.
+          Built for the “Programming estafeta” – 2 ta address (optional) + multi-permit → navigation link.
         </footer>
       </div>
 
@@ -233,13 +202,10 @@
   </div>
 
   <script>
-    const startFileInput = document.getElementById("start-file");
-    const startFileLabel = document.getElementById("start-file-label");
-    const endFileInput = document.getElementById("end-file");
-    const endFileLabel = document.getElementById("end-file-label");
-
     const startTextInput = document.getElementById("start-text");
     const endTextInput = document.getElementById("end-text");
+    const permitsInput = document.getElementById("permits");
+    const permitsLabel = document.getElementById("permits-label");
 
     const submitBtn = document.getElementById("submit-btn");
     const btnIcon = document.getElementById("btn-icon");
@@ -258,16 +224,14 @@
     const mapFrame = document.getElementById("map-frame");
     const mapEmpty = document.getElementById("map-empty");
 
-    startFileInput.addEventListener("change", () => {
-      startFileLabel.textContent = startFileInput.files.length
-        ? startFileInput.files[0].name
-        : "Hozircha fayl tanlanmagan";
-    });
-
-    endFileInput.addEventListener("change", () => {
-      endFileLabel.textContent = endFileInput.files.length
-        ? endFileInput.files[0].name
-        : "Hozircha fayl tanlanmagan";
+    permitsInput.addEventListener("change", () => {
+      if (!permitsInput.files.length) {
+        permitsLabel.textContent = "Hozircha fayl tanlanmagan";
+      } else if (permitsInput.files.length === 1) {
+        permitsLabel.textContent = permitsInput.files[0].name;
+      } else {
+        permitsLabel.textContent = permitsInput.files.length + " ta PDF tanlandi";
+      }
     });
 
     function setLoading(isLoading) {
@@ -280,39 +244,29 @@
       errorBox.classList.add("hidden");
       errorBox.textContent = "";
 
-      const startText = startTextInput.value.trim();
-      const endText = endTextInput.value.trim();
+      const start = startTextInput.value.trim();
+      const end = endTextInput.value.trim();
 
-      const hasStartFile = startFileInput.files.length > 0;
-      const hasEndFile = endFileInput.files.length > 0;
-
-      if (!hasStartFile && !startText) {
-        errorBox.textContent = "Starting address uchun text yoki PDF fayl kiriting.";
-        errorBox.classList.remove("hidden");
-        return;
-      }
-
-      if (!hasEndFile && !endText) {
-        errorBox.textContent = "Destination address uchun text yoki PDF fayl kiriting.";
+      if (!permitsInput.files.length && !(start && end)) {
+        errorBox.textContent = "Hech bo'lmaganda 1 ta permit PDF yoki ikkala adresni to'liq kiriting.";
         errorBox.classList.remove("hidden");
         return;
       }
 
       const formData = new FormData();
-      formData.append("start_address", startText);
-      formData.append("end_address", endText);
+      formData.append("start_address", start);
+      formData.append("end_address", end);
 
-      if (hasStartFile) {
-        formData.append("start_file", startFileInput.files[0]);
-      }
-      if (hasEndFile) {
-        formData.append("end_file", endFileInput.files[0]);
-      }
+      Array.from(permitsInput.files).forEach((file) => {
+        formData.append("permits", file);
+      });
 
       setLoading(true);
 
       try {
-        const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
+        // Agar backend boshqa domen bo'lsa, shu URLni moslashtirasan:
+        const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link",{
+        // const res = await fetch("/api/generate-navigation-link", {
           method: "POST",
           body: formData,
         });
