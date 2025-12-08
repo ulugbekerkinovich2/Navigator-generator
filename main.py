@@ -384,7 +384,7 @@ async def analyze_route_with_gemini(
     - If NO permits:
         - require both addresses
         - return them directly (no Gemini).
-    - If permits exist (up to ~20 PDFs for one load):
+    - If permits exist (N PDFs for one load):
         - if no Gemini key: fall back to addresses if possible.
         - else: call Gemini with PDFs + optional addresses.
     """
@@ -430,62 +430,81 @@ async def analyze_route_with_gemini(
     parts: List[dict] = []
     any_pdf = False
 
+    # Fayllar ro‘yxati va soni – promptga dynamic kiradi
+    filenames: List[str] = []
+    for p in permits:
+        if p.filename:
+            filenames.append(p.filename)
+        else:
+            filenames.append("unnamed.pdf")
+
+    files_list_text = "\n".join(f"- {name}" for name in filenames)
+    num_files = len(permits)
+
+    # Prompt – hech qanday statik shahar yo‘q, hammasi shu request uchun dynamic
     prompt = f"""
-You are a senior logistics & dispatch assistant.
+You are a senior logistics & routing specialist for oversize/overweight permits.
 
-You are given up to around 20 permit PDF files for usually ONE multi-state load.
-Each permit corresponds to a leg of the trip for a specific state or segment.
+You are given {num_files} permit PDF file(s) that all *probably* belong to ONE load.
+The files for this request are:
 
-Each PDF may contain load info such as:
-- PU (pickup), ORIGIN, SHIP FROM, PICKUP
-- DEL (delivery), DESTINATION, SHIP TO
-- City, state, addresses and dates.
+{files_list_text}
 
-User input (optional, high-level route):
-- Global starting address A1: "{start_address or "not provided"}"
-- Global final destination A2: "{end_address or "not provided"}"
+User-provided hints for THIS request:
+- Starting address hint: "{start_address or "not provided"}"
+- Destination address hint: "{end_address or "not provided"}"
 
-Treat ALL permits as candidates for legs of the SAME trip, unless a file is clearly unrelated.
+Inside the PDFs, carefully look for fields and text such as:
+- "ROUTE", "ROUTING", "PERMITTED ROUTE", "PROPOSED ROUTE"
+- "MILES", "TOTAL MILES", "SEGMENT MILES", "DISTANCE"
+- city and state names, origin/destination terminals, pickup/delivery locations
+- highway designations, junctions, mile-markers, and distance descriptions.
 
-Your tasks:
-1) For every permit, infer which CITY/STATE (and address if available) it represents.
-   Think of the trip as a sequence of legs across states (for example: TX → OK → KS → CO).
-2) Use the user-provided A1/A2 as soft hints for the global start and end regions:
-   - The global ORIGIN should be the earliest pickup geographically close to A1,
-     or the first logical pickup in the chain if A1 is missing or vague.
-   - The global DESTINATION should be the final delivery geographically close to A2,
-     or the last logical delivery in the chain if A2 is missing or vague.
-3) Determine a logical ORDER of the permits along the route from A1 to A2.
-   Ignore any permit that obviously belongs to a completely different load or direction.
-4) From this ordered route, extract a small list (max ~10) of KEY WAYPOINTS along the route:
-   examples: important cities, junctions, or state transitions in the correct order.
-   These waypoints will be used as Google Maps waypoints to force the driver to follow
-   the permitted route.
-5) If a permit only gives highway references like "5.0mi SE of SH114 & FM 718"
-   or "2.8mi from BOONE", convert them into nearby TOWN/CITY + STATE
-   (e.g. "Rhome, TX", "Boone, CO") so they can be used as Google Maps queries.
-6) Finally, return ONLY this JSON describing the global route:
+Work ONLY with the information in these PDFs and the optional hints above.
+Do NOT assume any static example route from previous tasks. Always reason
+freshly for this specific set of files.
+
+Your tasks for THIS load:
+
+1) Read ALL permits and infer the allowed path for the truck, using the ROUTE /
+   ROUTING sections and MILES / DISTANCE information to understand direction
+   and ordering of segments.
+
+2) Determine the GLOBAL ORIGIN:
+   - The earliest legal starting point on the permitted route, preferably close
+     to the starting address hint if it is reasonable.
+
+3) Determine the GLOBAL DESTINATION:
+   - The final legal delivery point on the permitted route, preferably close
+     to the destination address hint if it is reasonable.
+
+4) From the permitted ROUTES and MILES, build a SMALL ORDERED list of important
+   intermediate waypoints (maximum about 9 items). These should be major
+   towns/cities or important junctions on the permitted route, not every minor
+   turn.
+
+5) If you see vague distance phrases such as "X miles from Y" or
+   "at junction of HWY A and HWY B", map them to a nearby town/city + state
+   that is suitable for a Google Maps search.
+
+6) OUTPUT ONLY strict JSON in exactly this structure:
 
 {{
   "origin": "<Google Maps friendly query: city/state or full address>",
   "destination": "<Google Maps friendly query: city/state or full address>",
-  "waypoints": [
-    "<city/state or junction 1>",
-    "<city/state or junction 2>",
-    "... up to about 10 max ..."
-  ],
-  "notes": "short explanation of how you chose the origin, destination and waypoints"
+  "waypoints": ["<city/state or address 1>", "<city/state or address 2>", "..."],
+  "notes": "Short explanation of how you used the ROUTE / MILES data from these permits to choose origin, destination and waypoints."
 }}
 
-Rules:
-- Do NOT return markdown.
-- Do NOT include any extra keys.
-- The JSON must be valid and parseable.
+- "waypoints" MUST be an array (possibly empty).
+- Do NOT include any other keys.
+- Do NOT return markdown or commentary outside the JSON.
 """
 
+    # Promptni parts ga qo'shamiz
     parts.append({"text": prompt})
 
-    # Attach each file name and its PDF content
+    # Har bir PDF faylni dynamic tarzda qo‘shamiz
     for idx, permit in enumerate(permits, start=1):
         content = await permit.read()
         if not content:
@@ -494,7 +513,7 @@ Rules:
         any_pdf = True
 
         if permit.filename:
-            parts.append({"text": f"FILE_{idx} name: {permit.filename}"})
+            parts.append({"text": f"FILE_{idx} content (PDF):"})
 
         parts.append(
             {
@@ -506,6 +525,7 @@ Rules:
         )
 
     if not any_pdf:
+        # All files were empty → fallback to addresses
         if not (start_address and end_address):
             raise HTTPException(
                 400,
@@ -544,7 +564,7 @@ Rules:
     except Exception:
         raise HTTPException(500, f"Gemini response format is invalid: {r.text}")
 
-    # Clean possible ```json ... ``` wrappers
+    # Clean possible ```json … ``` wrappers
     text = raw_text.strip()
     if text.startswith("```"):
         lines = text.splitlines()
@@ -567,9 +587,16 @@ Rules:
     origin = (data.get("origin") or start_address).strip()
     destination = (data.get("destination") or end_address).strip()
     notes = (data.get("notes") or "").strip() or \
-        "Origin/destination and waypoints were determined from the ordered permits and user input."
+        "Origin/destination were determined from the permitted routes, miles and user input."
 
-    waypoints = _normalize_waypoints(data.get("waypoints"))
+    waypoints_raw = data.get("waypoints") or []
+    if not isinstance(waypoints_raw, list):
+        waypoints_raw = []
+
+    waypoints: List[str] = []
+    for w in waypoints_raw:
+        if isinstance(w, str) and w.strip():
+            waypoints.append(w.strip())
 
     return {
         "origin": origin,
