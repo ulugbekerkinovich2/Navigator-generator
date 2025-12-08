@@ -215,6 +215,22 @@
                   <p id="notes-text" class="text-xs text-slate-300"></p>
                 </div>
 
+                <!-- WAYPOINTS -->
+                <div class="space-y-1">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-400 flex items-center gap-1">
+                    Waypoints
+                    <span
+                      id="waypoints-count"
+                      class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300"
+                    >
+                      0
+                    </span>
+                  </p>
+                  <div id="waypoints-list" class="flex flex-wrap gap-1.5 text-xs">
+                    <span class="text-slate-500">No waypoints yet.</span>
+                  </div>
+                </div>
+
                 <div class="mt-2 flex flex-wrap gap-2">
                   <a
                     id="maps-link"
@@ -292,6 +308,9 @@
     const copyLinkBtn = document.getElementById("copy-link");
     const llmBadge = document.getElementById("llm-badge");
 
+    const waypointsList = document.getElementById("waypoints-list");
+    const waypointsCount = document.getElementById("waypoints-count");
+
     const mapWrapper = document.getElementById("map-wrapper");
     const mapFrame = document.getElementById("map-frame");
     const mapEmpty = document.getElementById("map-empty");
@@ -361,6 +380,9 @@
       destinationText.textContent = "";
       notesText.textContent = "";
       llmBadge.classList.add("hidden");
+
+      waypointsCount.textContent = "0";
+      waypointsList.innerHTML = '<span class="text-slate-500">No waypoints yet.</span>';
 
       resultCard.classList.add("hidden");
       emptyState.classList.remove("hidden");
@@ -465,6 +487,24 @@
         } else {
           llmBadge.textContent = "LLM: direct addresses";
           llmBadge.classList.remove("hidden");
+        }
+
+        // Waypoints rendering
+        const wps = Array.isArray(data.waypoints) ? data.waypoints : [];
+        waypointsList.innerHTML = "";
+        if (wps.length) {
+          waypointsCount.textContent = wps.length;
+          wps.forEach((wp, idx) => {
+            const chip = document.createElement("span");
+            chip.className =
+              "inline-flex items-center gap-1 rounded-full bg-slate-800/80 border border-slate-600/80 px-2 py-0.5 text-[11px] text-slate-100";
+            chip.innerHTML = `<span class="text-[9px] text-slate-400">${idx + 1}</span> ${wp}`;
+            waypointsList.appendChild(chip);
+          });
+        } else {
+          waypointsCount.textContent = "0";
+          waypointsList.innerHTML =
+            '<span class="text-slate-500">No waypoints detected – direct route.</span>';
         }
 
         emptyState.classList.add("hidden");
