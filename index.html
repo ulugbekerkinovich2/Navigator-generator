@@ -153,6 +153,7 @@
             <div class="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 id="submit-btn"
+                type="button"
                 class="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors px-4 py-2.5 text-sm font-semibold shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Generate link</span>
@@ -248,7 +249,9 @@
 
                   <button
                     id="copy-link"
-                    class="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-900/60 hover:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-900/60 hover:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    disabled
                   >
                     Copy link
                   </button>
@@ -390,6 +393,9 @@
       mapFrame.src = "";
       mapWrapper.classList.add("hidden");
       mapEmpty.classList.remove("hidden");
+
+      copyLinkBtn.disabled = true;
+      copyLinkBtn.textContent = "Copy link";
     }
 
     clearBtn.addEventListener("click", (e) => {
@@ -454,7 +460,7 @@
       try {
         // NOTE: change this URL if backend lives elsewhere
         const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
-        // const res = await fetch("http://127.0.0.1:8003/api/generate-navigation-link", {
+          // const res = await fetch("http://127.0.0.1:8003/api/generate-navigation-link", {
           method: "POST",
           body: formData,
         });
@@ -510,6 +516,13 @@
         emptyState.classList.add("hidden");
         resultCard.classList.remove("hidden");
 
+        // Enable copy button if link exists
+        if (data.google_maps_link) {
+          copyLinkBtn.disabled = false;
+        } else {
+          copyLinkBtn.disabled = true;
+        }
+
         // Map preview
         if (data.google_maps_link) {
           const embedUrl = data.google_maps_link.includes("output=embed")
@@ -534,9 +547,19 @@
       handleSubmit();
     });
 
+    // Enter bosilganda ham submit qilish (faqat form ichida emasligi uchun qo'lda)
+    [startTextInput, endTextInput].forEach((input) => {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleSubmit();
+        }
+      });
+    });
+
     copyLinkBtn.addEventListener("click", async () => {
       const url = mapsLink.href;
-      if (!url || url === "#") return;
+      if (!url || url === "#" || copyLinkBtn.disabled) return;
       try {
         await navigator.clipboard.writeText(url);
         copyLinkBtn.textContent = "Copied!";

@@ -265,6 +265,7 @@
 #             "used_gemini": used_gemini,
 #         }
 #     )
+
 import os
 import json
 import base64
@@ -295,15 +296,13 @@ app = FastAPI(title="Permit Navigation Link API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # demo/prototype; limit domains in production
-    allow_credentials=True,
+    allow_origins=["*"],  # demo/prototype; prod-da domen bilan cheklash mumkin
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
 # --------- Utils ---------
-
 
 def build_google_maps_link(
     origin: str,
@@ -312,8 +311,8 @@ def build_google_maps_link(
     waypoints: Optional[List[str]] = None,
 ) -> str:
     """
-    Build a Google Maps directions link.
-    If waypoints are provided, they are added as intermediate stops.
+    origin, destination, travel mode va ixtiyoriy waypointlar asosida
+    Google Maps Directions URL yasaydi.
     """
     params = {
         "api": "1",
@@ -323,11 +322,10 @@ def build_google_maps_link(
     }
 
     if waypoints:
-        # Google Maps supports multiple waypoints separated by "|"
-        # We limit to e.g. 10 to keep URL reasonable
-        cleaned = [wp for wp in waypoints if wp]
-        if cleaned:
-            params["waypoints"] = "|".join(cleaned[:10])
+        # "City1|City2|City3" formatida
+        clean = [w.strip() for w in waypoints if str(w).strip()]
+        if clean:
+            params["waypoints"] = "|".join(clean)
 
     return f"https://www.google.com/maps/dir/?{urlencode(params)}"
 
@@ -336,43 +334,7 @@ def pdf_to_base64(file_bytes: bytes) -> str:
     return base64.b64encode(file_bytes).decode("utf-8")
 
 
-def _normalize_waypoints(raw_waypoints) -> List[str]:
-    """
-    Normalize waypoints coming from Gemini.
-    Can be:
-      - list of strings
-      - list of objects
-      - comma separated string
-    We convert everything to a clean list[str].
-    """
-    if not raw_waypoints:
-        return []
-
-    if isinstance(raw_waypoints, str):
-        # Maybe "Amarillo, TX; Raton, NM; Pueblo, CO"
-        parts = [p.strip() for p in raw_waypoints.replace(";", ",").split(",")]
-        return [p for p in parts if p]
-
-    if isinstance(raw_waypoints, list):
-        cleaned = []
-        for item in raw_waypoints:
-            if isinstance(item, str):
-                text = item.strip()
-                if text:
-                    cleaned.append(text)
-            elif isinstance(item, dict):
-                # could be { "name": "Amarillo, TX", "note": "…" }
-                name = str(item.get("name", "")).strip()
-                if name:
-                    cleaned.append(name)
-        return cleaned
-
-    # Fallback
-    return []
-
-
-# --------- Core Gemini logic ---------
-
+# --------- Core logic ---------
 
 async def analyze_route_with_gemini(
     start_address: str,
@@ -380,20 +342,22 @@ async def analyze_route_with_gemini(
     permits: Optional[List[UploadFile]],
 ) -> dict:
     """
-    Logic:
-    - If NO permits:
-        - require both addresses
-        - return them directly (no Gemini).
-    - If permits exist (N PDFs for one load):
-        - if no Gemini key: fall back to addresses if possible.
-        - else: call Gemini with PDFs + optional addresses.
+    Advanced logika:
+    - 0 ta permit bo'lsa:
+        - ikkala address bo'lishi shart, LLM ishlatilmaydi.
+    - 1+ permit bo'lsa (15–20 ta gacha):
+        - Agar GEMINI yo'q bo'lsa: address bo'lsa, bevosita o'shani ishlatamiz.
+        - Agar GEMINI bor bo'lsa:
+            -> semua permitlarni, ichidagi ROUTE/MILES jadvalini,
+               PU/DEL/ORIGIN/DESTINATION ma'lumotlarini o'qib,
+               aqlli tarzda global origin/destination va waypoints topadi.
     """
 
     permits = permits or []
     start_address = (start_address or "").strip()
     end_address = (end_address or "").strip()
 
-    # 1) No permits at all => pure address mode
+    # 1) Hech qanday permit bo'lmasa — faqat address rejimi
     if not permits:
         if not (start_address and end_address):
             raise HTTPException(
@@ -405,11 +369,11 @@ async def analyze_route_with_gemini(
             "origin": start_address,
             "destination": end_address,
             "notes": "No permits uploaded. Used user-provided addresses directly.",
-            "waypoints": [],
             "used_gemini": False,
+            "waypoints": [],
         }
 
-    # 2) Permits exist but Gemini is not configured
+    # 2) Permits bor, lekin Gemini yo'q
     if not HAS_GEMINI:
         if not (start_address and end_address):
             raise HTTPException(
@@ -422,99 +386,99 @@ async def analyze_route_with_gemini(
             "origin": start_address,
             "destination": end_address,
             "notes": "Permits uploaded but Gemini API key missing. Used user-provided addresses.",
-            "waypoints": [],
             "used_gemini": False,
+            "waypoints": [],
         }
 
-    # 3) Permits exist and Gemini is available → call Gemini
+    # 3) Permits bor va Gemini mavjud → LLM orqali analiz
     parts: List[dict] = []
-    any_pdf = False
 
-    # Fayllar ro‘yxati va soni – promptga dynamic kiradi
-    filenames: List[str] = []
-    for p in permits:
-        if p.filename:
-            filenames.append(p.filename)
-        else:
-            filenames.append("unnamed.pdf")
-
-    files_list_text = "\n".join(f"- {name}" for name in filenames)
-    num_files = len(permits)
-
-    # Prompt – hech qanday statik shahar yo‘q, hammasi shu request uchun dynamic
+    # ---- Prompt: dynamic, route + miles aware, multi-leg + ordering ----
     prompt = f"""
-You are a senior logistics & routing specialist for oversize/overweight permits.
+You are an expert logistics and dispatch assistant.
 
-You are given {num_files} permit PDF file(s) that all *probably* belong to ONE load.
-The files for this request are:
+You are given multiple permit PDF files for one (usually multi-state) load.
+Each permit typically contains:
 
-{files_list_text}
+- HEADER / load info (carrier, shipper, load #, dates)
+- ORIGIN / PICKUP / SHIP FROM sections
+- DESTINATION / DELIVERY / SHIP TO sections
+- ROUTE sections that describe highways and junctions
+- MILES or distance tables, sometimes per segment
 
-User-provided hints for THIS request:
-- Starting address hint: "{start_address or "not provided"}"
-- Destination address hint: "{end_address or "not provided"}"
+User input (optional, high-level hint):
+- Global starting address A1: "{start_address or "not provided"}"
+- Global final destination A2: "{end_address or "not provided"}"
 
-Inside the PDFs, carefully look for fields and text such as:
-- "ROUTE", "ROUTING", "PERMITTED ROUTE", "PROPOSED ROUTE"
-- "MILES", "TOTAL MILES", "SEGMENT MILES", "DISTANCE"
-- city and state names, origin/destination terminals, pickup/delivery locations
-- highway designations, junctions, mile-markers, and distance descriptions.
+Important:
+- The uploaded permits can be 2–20 files for one route across several states
+  (e.g., TX → OK → KS → CO etc.).
+- Some files may be rate confirmations, some state permits, some pure route/mileage tables.
 
-Work ONLY with the information in these PDFs and the optional hints above.
-Do NOT assume any static example route from previous tasks. Always reason
-freshly for this specific set of files.
+Your job is to reconstruct the REALISTIC over-the-road route for the driver.
 
-Your tasks for THIS load:
+Reasoning rules (very important):
+1) Treat all permits as candidates for legs of ONE main trip.
+   - Identify which permits clearly belong to the same load.
+   - If a file looks totally unrelated (different states and directions, different load #),
+     IGNORE it or mention it only in your internal reasoning (do not use it for the route).
+2) Use all available details:
+   - City + state names (Rhome, TX; Amarillo, TX; Stratford, OK; Campo, CO; Boone, CO, etc.)
+   - Highway names (US-287, US-385, SH-114, CO-96, etc.)
+   - ROUTE and MILES columns or tables.
+   - Junction references like "x.y mi SE of SH114 & FM 718".
+3) Use miles/distance info to keep the route consistent:
+   - If the permit lists multiple segments with MILES, reconstruct a path where
+     the total distance approximately matches those segment sums.
+   - Prefer a sequence of cities and junctions that follow the same highways
+     and general direction (e.g., south→north, east→west) without illogical jumps.
+4) Global ORIGIN:
+   - The earliest logical pick-up city/state in the chain.
+   - If A1 (user start address) is close to that city, you can keep the city/state as the origin.
+5) Global DESTINATION:
+   - The final logical delivery city/state in the chain.
+   - If A2 (user destination) is close to that city, you can keep the city/state as the destination.
+6) Waypoints:
+   - Choose 4–12 key cities or highway junction areas along the route to represent the path.
+   - These must lie realistically on the corridor between ORIGIN and DESTINATION.
+   - Do NOT invent random cities far away from the described highways.
+   - Make them Google Maps friendly: "City, ST" or "City, State".
+7) Everything must be derived dynamically from THESE permits + general US geography.
+   - Do not rely on hardcoded examples.
+   - If there is ambiguity, choose the route that best matches the ROUTE + MILES data.
 
-1) Read ALL permits and infer the allowed path for the truck, using the ROUTE /
-   ROUTING sections and MILES / DISTANCE information to understand direction
-   and ordering of segments.
-
-2) Determine the GLOBAL ORIGIN:
-   - The earliest legal starting point on the permitted route, preferably close
-     to the starting address hint if it is reasonable.
-
-3) Determine the GLOBAL DESTINATION:
-   - The final legal delivery point on the permitted route, preferably close
-     to the destination address hint if it is reasonable.
-
-4) From the permitted ROUTES and MILES, build a SMALL ORDERED list of important
-   intermediate waypoints (maximum about 9 items). These should be major
-   towns/cities or important junctions on the permitted route, not every minor
-   turn.
-
-5) If you see vague distance phrases such as "X miles from Y" or
-   "at junction of HWY A and HWY B", map them to a nearby town/city + state
-   that is suitable for a Google Maps search.
-
-6) OUTPUT ONLY strict JSON in exactly this structure:
+Return ONLY valid JSON in this exact schema:
 
 {{
   "origin": "<Google Maps friendly query: city/state or full address>",
   "destination": "<Google Maps friendly query: city/state or full address>",
-  "waypoints": ["<city/state or address 1>", "<city/state or address 2>", "..."],
-  "notes": "Short explanation of how you used the ROUTE / MILES data from these permits to choose origin, destination and waypoints."
+  "waypoints": [
+    "City1, ST",
+    "City2, ST"
+  ],
+  "notes": "short explanation of how you chose the origin, destination and waypoints, including mention of key routes and miles."
 }}
 
-- "waypoints" MUST be an array (possibly empty).
-- Do NOT include any other keys.
-- Do NOT return markdown or commentary outside the JSON.
+- No markdown.
+- No extra top-level keys.
+- No commentary outside JSON.
 """
 
-    # Promptni parts ga qo'shamiz
     parts.append({"text": prompt})
 
-    # Har bir PDF faylni dynamic tarzda qo‘shamiz
-    for idx, permit in enumerate(permits, start=1):
+    # Har bir fayl uchun: filename + inlineData (PDF)
+    any_pdf = False
+    max_files = 25  # tokenlarni haddan oshirmaslik uchun limit
+
+    for idx, permit in enumerate(permits[:max_files], start=1):
         content = await permit.read()
         if not content:
             continue
 
         any_pdf = True
 
-        if permit.filename:
-            parts.append({"text": f"FILE_{idx} content (PDF):"})
-
+        filename = permit.filename or f"permit_{idx}.pdf"
+        parts.append({"text": f"FILE_{idx} NAME: {filename}"})
         parts.append(
             {
                 "inlineData": {
@@ -525,7 +489,7 @@ Your tasks for THIS load:
         )
 
     if not any_pdf:
-        # All files were empty → fallback to addresses
+        # Fayllar bo'sh bo'lib chiqqan holat
         if not (start_address and end_address):
             raise HTTPException(
                 400,
@@ -537,8 +501,8 @@ Your tasks for THIS load:
             "origin": start_address,
             "destination": end_address,
             "notes": "Permit files were empty. Used user-provided addresses.",
-            "waypoints": [],
             "used_gemini": False,
+            "waypoints": [],
         }
 
     payload = {
@@ -564,7 +528,7 @@ Your tasks for THIS load:
     except Exception:
         raise HTTPException(500, f"Gemini response format is invalid: {r.text}")
 
-    # Clean possible ```json … ``` wrappers
+    # --- Clean possible ```json ... ``` wrappers ---
     text = raw_text.strip()
     if text.startswith("```"):
         lines = text.splitlines()
@@ -586,29 +550,28 @@ Your tasks for THIS load:
 
     origin = (data.get("origin") or start_address).strip()
     destination = (data.get("destination") or end_address).strip()
-    notes = (data.get("notes") or "").strip() or \
-        "Origin/destination were determined from the permitted routes, miles and user input."
+    notes = (data.get("notes") or "").strip() or (
+        "Origin/destination and waypoints were determined from permits (routes + miles) and user input."
+    )
 
-    waypoints_raw = data.get("waypoints") or []
-    if not isinstance(waypoints_raw, list):
-        waypoints_raw = []
-
+    raw_waypoints = data.get("waypoints") or []
     waypoints: List[str] = []
-    for w in waypoints_raw:
-        if isinstance(w, str) and w.strip():
-            waypoints.append(w.strip())
+    if isinstance(raw_waypoints, list):
+        for w in raw_waypoints:
+            s = str(w).strip()
+            if s:
+                waypoints.append(s)
 
     return {
         "origin": origin,
         "destination": destination,
         "notes": notes,
-        "waypoints": waypoints,
         "used_gemini": True,
+        "waypoints": waypoints,
     }
 
 
 # --------- API route ---------
-
 
 @app.post("/api/generate-navigation-link")
 async def generate_navigation_link(
@@ -636,7 +599,7 @@ async def generate_navigation_link(
     destination = (data.get("destination") or "").strip()
     notes = (data.get("notes") or "").strip()
     used_gemini = bool(data.get("used_gemini"))
-    waypoints = _normalize_waypoints(data.get("waypoints"))
+    waypoints = data.get("waypoints") or []
 
     if not origin or not destination:
         raise HTTPException(500, f"Could not determine origin/destination: {data}")
