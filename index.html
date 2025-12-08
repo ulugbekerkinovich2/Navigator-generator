@@ -9,7 +9,7 @@
 </head>
 <body class="min-h-full bg-slate-950 text-slate-50">
   <div class="min-h-screen flex items-center justify-center px-4 py-10">
-    <div class="w-full max-w-6xl grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-6">
+    <div class="w-full max-w-6xl grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)] gap-6">
       <!-- LEFT: Header + Form + Result text -->
       <div class="bg-slate-900/80 border border-slate-700 rounded-2xl shadow-2xl shadow-blue-500/20 p-6 md:p-8 flex flex-col">
         <!-- Header -->
@@ -58,24 +58,9 @@
               </div>
 
               <p class="text-[11px] text-slate-500">
-                If you don't know the exact addresses, you can just upload the permits — the AI will detect pickup and delivery for you.
+                If you don’t know the exact addresses, you can just upload the permit PDFs — the AI will detect pickup
+                and delivery for you.
               </p>
-            </div>
-
-            <!-- Travel mode -->
-            <div class="space-y-2">
-              <label class="block text-xs font-medium text-slate-300 mb-1">
-                Travel mode
-              </label>
-              <select
-                id="travel-mode"
-                class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
-              >
-                <option value="driving">Driving (default)</option>
-                <option value="walking">Walking</option>
-                <option value="bicycling">Bicycling</option>
-                <option value="transit">Transit</option>
-              </select>
             </div>
 
             <!-- Single upload for ALL permits -->
@@ -95,7 +80,7 @@
                   Upload <span class="text-blue-300">permits</span> (PDF, multi)
                 </p>
                 <p class="text-xs text-slate-400">
-                  Drop your rate confirmation, TX PERMIT, CO PERMIT and other files here (4–5 PDFs recommended).
+                  Drop your rate confirmation, TX PERMIT, CO PERMIT and other files here (4–20 PDFs recommended).
                 </p>
                 <input
                   id="permits"
@@ -108,28 +93,92 @@
                   No files selected yet
                 </p>
               </label>
+
+              <!-- File tags -->
+              <div id="file-tags" class="mt-3 flex flex-wrap gap-1.5 text-[11px]"></div>
             </div>
 
-            <!-- Submit -->
-            <button
-              id="submit-btn"
-              class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors px-4 py-2.5 text-sm font-semibold shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span>Generate navigation link</span>
-              <svg id="btn-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                   viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                      d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-              <svg id="btn-spinner" xmlns="http://www.w3.org/2000/svg"
-                   class="hidden h-4 w-4 animate-spin"
-                   viewBox="0 0 24 24" fill="none">
-                <circle class="opacity-25" cx="12" cy="12" r="10"
-                        stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor"
-                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-              </svg>
-            </button>
+            <!-- Advanced options (hidden by default) -->
+            <div class="mt-1">
+              <button
+                id="toggle-advanced"
+                type="button"
+                class="text-[11px] text-slate-400 hover:text-slate-200 inline-flex items-center gap-1"
+              >
+                <span id="toggle-advanced-icon">▸</span>
+                <span>Show advanced options</span>
+              </button>
+
+              <div id="advanced-panel" class="mt-3 space-y-2 hidden">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-[11px] uppercase tracking-wide text-slate-400">Travel mode</span>
+                  <span id="travel-mode-label" class="text-[11px] text-slate-300">
+                    Driving
+                  </span>
+                </div>
+                <div class="inline-flex flex-wrap gap-1.5 rounded-full bg-slate-900/70 p-1 border border-slate-700">
+                  <button
+                    type="button"
+                    class="travel-mode-btn px-3 py-1 text-[11px] rounded-full bg-blue-500 text-slate-950 font-medium shadow-sm"
+                    data-mode="driving"
+                  >
+                    Driving
+                  </button>
+                  <button
+                    type="button"
+                    class="travel-mode-btn px-3 py-1 text-[11px] rounded-full text-slate-200 hover:bg-slate-800"
+                    data-mode="walking"
+                  >
+                    Walking
+                  </button>
+                  <button
+                    type="button"
+                    class="travel-mode-btn px-3 py-1 text-[11px] rounded-full text-slate-200 hover:bg-slate-800"
+                    data-mode="bicycling"
+                  >
+                    Cycling
+                  </button>
+                  <button
+                    type="button"
+                    class="travel-mode-btn px-3 py-1 text-[11px] rounded-full text-slate-200 hover:bg-slate-800"
+                    data-mode="transit"
+                  >
+                    Transit
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex flex-col sm:flex-row gap-2 pt-1">
+              <button
+                id="submit-btn"
+                class="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors px-4 py-2.5 text-sm font-semibold shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>Generate navigation link</span>
+                <svg id="btn-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                        d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+                <svg id="btn-spinner" xmlns="http://www.w3.org/2000/svg"
+                     class="hidden h-4 w-4 animate-spin"
+                     viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10"
+                          stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+              </button>
+
+              <button
+                id="clear-btn"
+                type="button"
+                class="sm:w-32 inline-flex items-center justify-center rounded-xl border border-slate-600 bg-slate-900/70 hover:bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200"
+              >
+                Clear form
+              </button>
+            </div>
 
             <p id="error-box" class="hidden text-xs text-red-400 bg-red-950/40 border border-red-700/60 rounded-lg px-3 py-2"></p>
           </section>
@@ -137,9 +186,14 @@
           <!-- RESULT TEXT -->
           <section class="space-y-4">
             <div class="border border-slate-700 rounded-xl bg-slate-900/60 p-4 h-full flex flex-col">
-              <h2 class="text-sm font-semibold text-slate-100 mb-2">
-                Result
-              </h2>
+              <div class="flex items-center justify-between mb-2">
+                <h2 class="text-sm font-semibold text-slate-100">
+                  Result
+                </h2>
+                <span id="llm-badge" class="hidden text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-600">
+                  LLM: Gemini
+                </span>
+              </div>
 
               <div id="empty-state" class="text-xs text-slate-400 flex-1 flex items-center">
                 Origin / Destination / Notes will appear here after generation.
@@ -219,11 +273,12 @@
   <script>
     const startTextInput = document.getElementById("start-text");
     const endTextInput = document.getElementById("end-text");
-    const travelModeSelect = document.getElementById("travel-mode");
     const permitsInput = document.getElementById("permits");
     const permitsLabel = document.getElementById("permits-label");
+    const fileTags = document.getElementById("file-tags");
 
     const submitBtn = document.getElementById("submit-btn");
+    const clearBtn = document.getElementById("clear-btn");
     const btnIcon = document.getElementById("btn-icon");
     const btnSpinner = document.getElementById("btn-spinner");
     const errorBox = document.getElementById("error-box");
@@ -235,19 +290,55 @@
     const notesText = document.getElementById("notes-text");
     const mapsLink = document.getElementById("maps-link");
     const copyLinkBtn = document.getElementById("copy-link");
+    const llmBadge = document.getElementById("llm-badge");
 
     const mapWrapper = document.getElementById("map-wrapper");
     const mapFrame = document.getElementById("map-frame");
     const mapEmpty = document.getElementById("map-empty");
 
+    const toggleAdvancedBtn = document.getElementById("toggle-advanced");
+    const toggleAdvancedIcon = document.getElementById("toggle-advanced-icon");
+    const advancedPanel = document.getElementById("advanced-panel");
+    const travelModeLabel = document.getElementById("travel-mode-label");
+    const travelModeButtons = document.querySelectorAll(".travel-mode-btn");
+
+    let currentTravelMode = "driving";
+
+    // --- helpers ---
+
+    function renderFileTags() {
+      fileTags.innerHTML = "";
+      const files = Array.from(permitsInput.files || []);
+      if (!files.length) return;
+
+      const maxVisible = 3;
+      files.slice(0, maxVisible).forEach((file) => {
+        const span = document.createElement("span");
+        span.className =
+          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-600";
+        span.textContent = file.name;
+        fileTags.appendChild(span);
+      });
+
+      if (files.length > maxVisible) {
+        const more = document.createElement("span");
+        more.className =
+          "inline-flex items-center px-2 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-dashed border-slate-600 text-[11px]";
+        more.textContent = `+${files.length - maxVisible} more`;
+        fileTags.appendChild(more);
+      }
+    }
+
     permitsInput.addEventListener("change", () => {
-      if (!permitsInput.files.length) {
+      const count = permitsInput.files.length;
+      if (!count) {
         permitsLabel.textContent = "No files selected yet";
-      } else if (permitsInput.files.length === 1) {
+      } else if (count === 1) {
         permitsLabel.textContent = permitsInput.files[0].name;
       } else {
-        permitsLabel.textContent = `${permitsInput.files.length} PDF files selected`;
+        permitsLabel.textContent = `${count} PDF files selected`;
       }
+      renderFileTags();
     });
 
     function setLoading(isLoading) {
@@ -256,18 +347,61 @@
       btnSpinner.classList.toggle("hidden", !isLoading);
     }
 
-    function extractErrorMessage(data) {
-      if (!data) return "Unknown server error.";
-      if (typeof data === "string") return data;
-      if (data.detail) {
-        if (typeof data.detail === "string") return data.detail;
-        if (Array.isArray(data.detail)) {
-          return data.detail.map(d => d.msg || JSON.stringify(d)).join(" | ");
-        }
-        return JSON.stringify(data.detail);
-      }
-      return JSON.stringify(data);
+    function resetForm() {
+      startTextInput.value = "";
+      endTextInput.value = "";
+      permitsInput.value = "";
+      permitsLabel.textContent = "No files selected yet";
+      fileTags.innerHTML = "";
+
+      errorBox.classList.add("hidden");
+      errorBox.textContent = "";
+
+      originText.textContent = "";
+      destinationText.textContent = "";
+      notesText.textContent = "";
+      llmBadge.classList.add("hidden");
+
+      resultCard.classList.add("hidden");
+      emptyState.classList.remove("hidden");
+
+      mapFrame.src = "";
+      mapWrapper.classList.add("hidden");
+      mapEmpty.classList.remove("hidden");
     }
+
+    clearBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      resetForm();
+    });
+
+    // Advanced options toggle
+    toggleAdvancedBtn.addEventListener("click", () => {
+      const isHidden = advancedPanel.classList.contains("hidden");
+      advancedPanel.classList.toggle("hidden", !isHidden);
+      toggleAdvancedIcon.textContent = isHidden ? "▾" : "▸";
+      toggleAdvancedBtn.querySelector("span:nth-child(2)").textContent = isHidden
+        ? "Hide advanced options"
+        : "Show advanced options";
+    });
+
+    // Travel mode pills
+    travelModeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        currentTravelMode = btn.dataset.mode || "driving";
+        travelModeButtons.forEach((b) => {
+          if (b === btn) {
+            b.classList.add("bg-blue-500", "text-slate-950", "font-medium", "shadow-sm");
+            b.classList.remove("text-slate-200", "hover:bg-slate-800");
+          } else {
+            b.classList.remove("bg-blue-500", "text-slate-950", "font-medium", "shadow-sm");
+            b.classList.add("text-slate-200", "hover:bg-slate-800");
+          }
+        });
+        travelModeLabel.textContent =
+          currentTravelMode.charAt(0).toUpperCase() + currentTravelMode.slice(1);
+      });
+    });
 
     async function handleSubmit() {
       errorBox.classList.add("hidden");
@@ -275,10 +409,11 @@
 
       const start = startTextInput.value.trim();
       const end = endTextInput.value.trim();
-      const travelMode = travelModeSelect.value;
+      const hasPermits = !!permitsInput.files.length;
 
-      if (!permitsInput.files.length && !(start && end)) {
-        errorBox.textContent = "Provide at least one permit PDF or both starting and destination addresses.";
+      if (!hasPermits && !(start && end)) {
+        errorBox.textContent =
+          "Please upload at least one permit PDF or provide both starting and destination addresses.";
         errorBox.classList.remove("hidden");
         return;
       }
@@ -286,7 +421,7 @@
       const formData = new FormData();
       formData.append("start_address", start);
       formData.append("end_address", end);
-      formData.append("travel_mode", travelMode);
+      formData.append("travel_mode", currentTravelMode);
 
       Array.from(permitsInput.files).forEach((file) => {
         formData.append("permits", file);
@@ -295,28 +430,28 @@
       setLoading(true);
 
       try {
-        // Use your backend domain here
-        const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
-        // const res = await fetch("http://localhost:8003/api/generate-navigation-link", {
+        // NOTE: change this URL if backend lives elsewhere
+        // const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
+        const res = await fetch("http://127.0.0.1:8003/api/generate-navigation-link", {
           method: "POST",
           body: formData,
         });
 
         const raw = await res.text();
         if (!raw) {
-          throw new Error("The server returned an empty response.");
+          throw new Error("Server returned an empty response.");
         }
 
         let data;
         try {
           data = JSON.parse(raw);
         } catch (e) {
-          console.error("JSON parse error, raw:", raw);
-          throw new Error("The server did not return valid JSON.");
+          console.error("JSON parse error. Raw:", raw);
+          throw new Error("Server did not return valid JSON.");
         }
 
         if (!res.ok || !data.success) {
-          throw new Error(extractErrorMessage(data));
+          throw new Error(data.detail || "Server error.");
         }
 
         originText.textContent = data.origin || "-";
@@ -324,9 +459,18 @@
         notesText.textContent = data.notes || "";
         mapsLink.href = data.google_maps_link || "#";
 
+        if (data.used_gemini === true) {
+          llmBadge.textContent = "LLM: Gemini (permits used)";
+          llmBadge.classList.remove("hidden");
+        } else {
+          llmBadge.textContent = "LLM: direct addresses";
+          llmBadge.classList.remove("hidden");
+        }
+
         emptyState.classList.add("hidden");
         resultCard.classList.remove("hidden");
 
+        // Map preview
         if (data.google_maps_link) {
           const embedUrl = data.google_maps_link.includes("output=embed")
             ? data.google_maps_link
@@ -357,7 +501,9 @@
         await navigator.clipboard.writeText(url);
         copyLinkBtn.textContent = "Copied!";
         setTimeout(() => (copyLinkBtn.textContent = "Copy link"), 1200);
-      } catch {}
+      } catch {
+        // ignore
+      }
     });
   </script>
 </body>
