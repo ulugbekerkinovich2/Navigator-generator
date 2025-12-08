@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <title>Permit Navigation Link Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-full bg-slate-950 text-slate-50">
+  <div class="min-h-screen flex items-center justify-center px-4 py-10">
+    <div class="w-full max-w-6xl grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] gap-6">
+      <!-- LEFT: Header + Form + Result text -->
+      <div class="bg-slate-900/80 border border-slate-700 rounded-2xl shadow-2xl shadow-blue-500/20 p-6 md:p-8 flex flex-col">
+        <!-- Header -->
+        <header class="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <h1 class="text-2xl md:text-3xl font-semibold tracking-tight">
+              Permit Navigation Link Generator
+            </h1>
+            <p class="mt-1 text-sm text-slate-400">
+              Starting permit (PDF) + Destination permit (PDF) → Google Maps navigation link.
+            </p>
+          </div>
+          <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 border border-emerald-500/40">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Live prototype
+          </span>
+        </header>
+
+        <div class="grid md:grid-cols-2 gap-6 flex-1">
+          <!-- FORM -->
+          <section class="space-y-4">
+            <div class="space-y-4">
+              <!-- Starting permit -->
+              <div class="border border-dashed border-slate-600 rounded-xl p-4 bg-slate-900/60">
+                <label
+                  for="start-file"
+                  class="flex flex-col items-center justify-center gap-2 cursor-pointer text-center"
+                >
+                  <div class="flex items-center justify-center w-10 h-10 rounded-full bg-blue-500/20 text-blue-300 mb-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                         viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0L8 12m4-4v12" />
+                    </svg>
+                  </div>
+                  <p class="text-sm font-medium">
+                    Upload <span class="text-blue-300">Starting permit</span> (PDF)
+                  </p>
+                  <p class="text-xs text-slate-400">
+                    Masalan: TX PERMIT (pickup / origin uchun).
+                  </p>
+                  <input
+                    id="start-file"
+                    type="file"
+                    class="hidden"
+                    accept="application/pdf"
+                  />
+                  <p id="start-file-label" class="mt-2 text-xs text-slate-400">
+                    Hozircha fayl tanlanmagan
+                  </p>
+                </label>
+              </div>
+
+              <!-- Destination permit -->
+              <div class="border border-dashed border-slate-600 rounded-xl p-4 bg-slate-900/60">
+                <label
+                  for="end-file"
+                  class="flex flex-col items-center justify-center gap-2 cursor-pointer text-center"
+                >
+                  <div class="flex items-center justify-center w-10 h-10 rounded-full bg-purple-500/20 text-purple-300 mb-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                         viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                            d="M12 5v14m0 0l-5-5m5 5l5-5" />
+                    </svg>
+                  </div>
+                  <p class="text-sm font-medium">
+                    Upload <span class="text-purple-300">Destination permit</span> (PDF)
+                  </p>
+                  <p class="text-xs text-slate-400">
+                    Masalan: CO PERMIT (delivery / destination uchun).
+                  </p>
+                  <input
+                    id="end-file"
+                    type="file"
+                    class="hidden"
+                    accept="application/pdf"
+                  />
+                  <p id="end-file-label" class="mt-2 text-xs text-slate-400">
+                    Hozircha fayl tanlanmagan
+                  </p>
+                </label>
+              </div>
+            </div>
+
+            <button
+              id="submit-btn"
+              class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors px-4 py-2.5 text-sm font-semibold shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span>Generate navigation link</span>
+              <svg id="btn-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                      d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+              <svg id="btn-spinner" xmlns="http://www.w3.org/2000/svg"
+                   class="hidden h-4 w-4 animate-spin"
+                   viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10"
+                        stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+            </button>
+
+            <p id="error-box" class="hidden text-xs text-red-400 bg-red-950/40 border border-red-700/60 rounded-lg px-3 py-2"></p>
+          </section>
+
+          <!-- RESULT TEXT -->
+          <section class="space-y-4">
+            <div class="border border-slate-700 rounded-xl bg-slate-900/60 p-4 h-full flex flex-col">
+              <h2 class="text-sm font-semibold text-slate-100 mb-2">
+                Result
+              </h2>
+
+              <div id="empty-state" class="text-xs text-slate-400 flex-1 flex items-center">
+                Origin / Destination / Notes shu yerda chiqadi.
+              </div>
+
+              <div id="result-card" class="hidden flex-1 flex flex-col gap-3">
+                <div class="space-y-1">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-400">Origin</p>
+                  <p id="origin-text" class="text-sm font-medium text-slate-50"></p>
+                </div>
+
+                <div class="space-y-1">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-400">Destination</p>
+                  <p id="destination-text" class="text-sm font-medium text-slate-50"></p>
+                </div>
+
+                <div class="space-y-1">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-400">Notes</p>
+                  <p id="notes-text" class="text-xs text-slate-300"></p>
+                </div>
+
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <a
+                    id="maps-link"
+                    href="#"
+                    target="_blank"
+                    class="inline-flex items-center gap-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition-colors"
+                  >
+                    Open in Google Maps
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                         viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"
+                            d="M13 5h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+
+                  <button
+                    id="copy-link"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-900/60 hover:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <footer class="mt-4 text-[11px] text-slate-500 text-right">
+          Built for the “Programming estafeta” – starting permit + destination permit → navigation link.
+        </footer>
+      </div>
+
+      <!-- RIGHT: MAP PREVIEW CARD -->
+      <div class="bg-slate-900/80 border border-slate-700 rounded-2xl shadow-xl shadow-blue-500/20 p-4 md:p-5 flex flex-col">
+        <h2 class="text-sm font-semibold text-slate-100 mb-2">
+          Route preview
+        </h2>
+
+        <p id="map-empty" class="text-xs text-slate-400 flex-1 flex items-center">
+          Link generatsiya qilingandan so‘ng, Google Maps preview shu yerda ko‘rinadi.
+        </p>
+
+        <div id="map-wrapper" class="hidden mt-1 border border-slate-700 rounded-xl overflow-hidden flex-1">
+          <iframe
+            id="map-frame"
+            src=""
+            class="w-full h-full border-0"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"
+          ></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const startFileInput = document.getElementById("start-file");
+    const startFileLabel = document.getElementById("start-file-label");
+    const endFileInput = document.getElementById("end-file");
+    const endFileLabel = document.getElementById("end-file-label");
+
+    const submitBtn = document.getElementById("submit-btn");
+    const btnIcon = document.getElementById("btn-icon");
+    const btnSpinner = document.getElementById("btn-spinner");
+    const errorBox = document.getElementById("error-box");
+
+    const emptyState = document.getElementById("empty-state");
+    const resultCard = document.getElementById("result-card");
+    const originText = document.getElementById("origin-text");
+    const destinationText = document.getElementById("destination-text");
+    const notesText = document.getElementById("notes-text");
+    const mapsLink = document.getElementById("maps-link");
+    const copyLinkBtn = document.getElementById("copy-link");
+
+    const mapWrapper = document.getElementById("map-wrapper");
+    const mapFrame = document.getElementById("map-frame");
+    const mapEmpty = document.getElementById("map-empty");
+
+    startFileInput.addEventListener("change", () => {
+      startFileLabel.textContent = startFileInput.files.length
+        ? startFileInput.files[0].name
+        : "Hozircha fayl tanlanmagan";
+    });
+
+    endFileInput.addEventListener("change", () => {
+      endFileLabel.textContent = endFileInput.files.length
+        ? endFileInput.files[0].name
+        : "Hozircha fayl tanlanmagan";
+    });
+
+    function setLoading(isLoading) {
+      submitBtn.disabled = isLoading;
+      btnIcon.classList.toggle("hidden", isLoading);
+      btnSpinner.classList.toggle("hidden", !isLoading);
+    }
+
+    async function handleSubmit() {
+      errorBox.classList.add("hidden");
+      errorBox.textContent = "";
+
+      if (!startFileInput.files.length || !endFileInput.files.length) {
+        errorBox.textContent = "Starting va Destination uchun ikkala permit PDF faylini tanlang.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("permits", startFileInput.files[0]);
+      formData.append("permits", endFileInput.files[0]);
+
+      setLoading(true);
+
+      try {
+        const res = await fetch("http://localhost:8003/api/generate-navigation-link", {
+          method: "POST",
+          body: formData,
+        });
+
+        const raw = await res.text();
+        if (!raw) {
+          throw new Error("Server bo'sh javob qaytardi.");
+        }
+
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch (e) {
+          console.error("JSON parse xato, raw:", raw);
+          throw new Error("Server JSON formatida javob qaytarmadi.");
+        }
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.detail || "Server xatosi");
+        }
+
+        originText.textContent = data.origin || "-";
+        destinationText.textContent = data.destination || "-";
+        notesText.textContent = data.notes || "";
+        mapsLink.href = data.google_maps_link || "#";
+
+        emptyState.classList.add("hidden");
+        resultCard.classList.remove("hidden");
+
+        // Map preview
+        if (data.google_maps_link) {
+          const embedUrl = data.google_maps_link.includes("output=embed")
+            ? data.google_maps_link
+            : data.google_maps_link + "&output=embed";
+
+          mapFrame.src = embedUrl;
+          mapEmpty.classList.add("hidden");
+          mapWrapper.classList.remove("hidden");
+        }
+      } catch (err) {
+        console.error(err);
+        errorBox.textContent = err.message || "Noma'lum xato yuz berdi.";
+        errorBox.classList.remove("hidden");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    submitBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleSubmit();
+    });
+
+    copyLinkBtn.addEventListener("click", async () => {
+      const url = mapsLink.href;
+      if (!url || url === "#") return;
+      try {
+        await navigator.clipboard.writeText(url);
+        copyLinkBtn.textContent = "Copied!";
+        setTimeout(() => (copyLinkBtn.textContent = "Copy link"), 1200);
+      } catch {}
+    });
+  </script>
+</body>
+</html>
