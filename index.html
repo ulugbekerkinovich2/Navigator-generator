@@ -19,7 +19,7 @@
               Permit Navigation Link Generator
             </h1>
             <p class="mt-1 text-sm text-slate-400">
-              Starting / Destination — address (optional) + permit PDF’lar → Google Maps navigation link.
+              Starting / Destination — address (optional) + permit PDFs → Google Maps navigation link.
             </p>
           </div>
           <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 border border-emerald-500/40">
@@ -40,7 +40,7 @@
                 <input
                   id="start-text"
                   type="text"
-                  placeholder="Masalan: Reliable Rebar, 224 Capital Lane, Rhome, TX"
+                  placeholder="Example: Reliable Rebar, 224 Capital Lane, Rhome, TX 76078"
                   class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500/70"
                 />
               </div>
@@ -52,14 +52,14 @@
                 <input
                   id="end-text"
                   type="text"
-                  placeholder="Masalan: Boone, CO"
+                  placeholder="Example: Boone, CO"
                   class="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-purple-500/70"
                 />
               </div>
 
               <p class="text-[11px] text-slate-500">
-                Agar adreslarni bilmasangiz, faqat permit PDF’larni yuklasangiz ham bo‘ladi —
-                AI pickup/delivery ni o‘zi topadi.
+                If you don’t know the exact addresses, you can just upload the permit PDFs —
+                the AI will detect pickup and delivery for you.
               </p>
             </div>
 
@@ -80,7 +80,7 @@
                   Upload <span class="text-blue-300">permits</span> (PDF, multi)
                 </p>
                 <p class="text-xs text-slate-400">
-                  Rate con, TX PERMIT, CO PERMIT va boshqa fayllarni bir joyga tashlang (4–5 ta bo‘lishi mumkin).
+                  Drop your rate confirmation, TX PERMIT, CO PERMIT and other files here (4–5 PDFs recommended).
                 </p>
                 <input
                   id="permits"
@@ -90,7 +90,7 @@
                   multiple
                 />
                 <p id="permits-label" class="mt-2 text-xs text-slate-400">
-                  Hozircha fayl tanlanmagan
+                  No files selected yet
                 </p>
               </label>
             </div>
@@ -127,7 +127,7 @@
               </h2>
 
               <div id="empty-state" class="text-xs text-slate-400 flex-1 flex items-center">
-                Origin / Destination / Notes shu yerda chiqadi.
+                Origin / Destination / Notes will appear here after generation.
               </div>
 
               <div id="result-card" class="hidden flex-1 flex flex-col gap-3">
@@ -174,7 +174,7 @@
         </div>
 
         <footer class="mt-4 text-[11px] text-slate-500 text-right">
-          Built for the “Programming estafeta” – 2 ta address (optional) + multi-permit → navigation link.
+          Built for the “Programming Estafeta” – 2 addresses (optional) + multi-permit → navigation link.
         </footer>
       </div>
 
@@ -185,7 +185,7 @@
         </h2>
 
         <p id="map-empty" class="text-xs text-slate-400 flex-1 flex items-center">
-          Link generatsiya qilingandan so‘ng, Google Maps preview shu yerda ko‘rinadi.
+          Once the link is generated, a Google Maps preview will appear here.
         </p>
 
         <div id="map-wrapper" class="hidden mt-1 border border-slate-700 rounded-xl overflow-hidden flex-1">
@@ -226,11 +226,11 @@
 
     permitsInput.addEventListener("change", () => {
       if (!permitsInput.files.length) {
-        permitsLabel.textContent = "Hozircha fayl tanlanmagan";
+        permitsLabel.textContent = "No files selected yet";
       } else if (permitsInput.files.length === 1) {
         permitsLabel.textContent = permitsInput.files[0].name;
       } else {
-        permitsLabel.textContent = permitsInput.files.length + " ta PDF tanlandi";
+        permitsLabel.textContent = permitsInput.files.length + " PDFs selected";
       }
     });
 
@@ -248,7 +248,7 @@
       const end = endTextInput.value.trim();
 
       if (!permitsInput.files.length && !(start && end)) {
-        errorBox.textContent = "Hech bo'lmaganda 1 ta permit PDF yoki ikkala adresni to'liq kiriting.";
+        errorBox.textContent = "Please provide at least one permit PDF or both starting and destination addresses.";
         errorBox.classList.remove("hidden");
         return;
       }
@@ -264,28 +264,28 @@
       setLoading(true);
 
       try {
-        // Agar backend boshqa domen bo'lsa, shu URLni moslashtirasan:
-        const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link",{
-        // const res = await fetch("/api/generate-navigation-link", {
+        // Adjust URL if backend is on a different domain
+        const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
+          // Or: const res = await fetch("/api/generate-navigation-link", { ... })
           method: "POST",
           body: formData,
         });
 
         const raw = await res.text();
         if (!raw) {
-          throw new Error("Server bo'sh javob qaytardi.");
+          throw new Error("Server returned an empty response.");
         }
 
         let data;
         try {
           data = JSON.parse(raw);
         } catch (e) {
-          console.error("JSON parse xato, raw:", raw);
-          throw new Error("Server JSON formatida javob qaytarmadi.");
+          console.error("JSON parse error, raw:", raw);
+          throw new Error("Server did not return valid JSON.");
         }
 
         if (!res.ok || !data.success) {
-          throw new Error(data.detail || "Server xatosi");
+          throw new Error(data.detail || "Server error");
         }
 
         originText.textContent = data.origin || "-";
@@ -307,7 +307,7 @@
         }
       } catch (err) {
         console.error(err);
-        errorBox.textContent = err.message || "Noma'lum xato yuz berdi.";
+        errorBox.textContent = err.message || "An unknown error occurred.";
         errorBox.classList.remove("hidden");
       } finally {
         setLoading(false);
