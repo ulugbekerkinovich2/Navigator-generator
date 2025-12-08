@@ -9,7 +9,8 @@
 </head>
 <body class="min-h-full bg-slate-950 text-slate-50">
   <div class="min-h-screen flex items-center justify-center px-4 py-10">
-    <div class="w-full max-w-6xl grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)] gap-6">
+    <!-- 🔥 Kengaytirilgan container: max-w-[1400px] -->
+    <div class="w-full max-w-[1400px] grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)] gap-6">
       <!-- LEFT: Header + Form + Result text -->
       <div class="bg-slate-900/80 border border-slate-700 rounded-2xl shadow-2xl shadow-blue-500/20 p-6 md:p-8 flex flex-col">
         <!-- Header -->
@@ -267,7 +268,7 @@
       </div>
 
       <!-- RIGHT: MAP PREVIEW CARD -->
-      <div class="bg-slate-900/80 border border-slate-700 rounded-2xl shadow-xl shadow-blue-500/20 p-4 md:p-5 flex flex-col">
+      <div class="bg-slate-900/80 border border-slate-700 rounded-2xl shadow-xl shadow-blue-500/20 p-4 md:p-5 flex flex-col lg:min-h-[540px]">
         <h2 class="text-sm font-semibold text-slate-100 mb-2">
           Route preview
         </h2>
@@ -288,6 +289,14 @@
       </div>
     </div>
   </div>
+
+  <!-- JS (o‘zgarmagan) -->
+  <script>
+    /* shu yerga avvalgi JS’ingni o‘sha-o‘sha qoldirasan – faqat container’lar kengaydi */
+  </script>
+</body>
+</html>
+
 
   <script>
     const startTextInput = document.getElementById("start-text");
@@ -459,8 +468,8 @@
 
       try {
         // NOTE: change this URL if backend lives elsewhere
-        const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
-          // const res = await fetch("http://127.0.0.1:8003/api/generate-navigation-link", {
+        // const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
+          const res = await fetch("http://127.0.0.1:8003/api/generate-navigation-link", {
           method: "POST",
           body: formData,
         });
