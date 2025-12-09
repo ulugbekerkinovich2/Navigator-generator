@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ---------- Gemini config ----------
+# --------- mini config ---------
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 HAS_GEMINI = bool(GEMINI_API_KEY)
@@ -22,109 +22,158 @@ GEMINI_API_URL = (
     "gemini-2.0-flash:generateContent"
 )
 
-# ---------- FastAPI app ----------
+# --------- Google Maps Embed config (faqat backendda saqlanadi) ---------
+
+GOOGLE_MAPS_EMBED_API_KEY = os.getenv("MAPS_API_KEY")
+HAS_EMBED_KEY = bool(GOOGLE_MAPS_EMBED_API_KEY)
+
+# --------- FastAPI app ---------
 
 app = FastAPI(title="Permit Navigation Link API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # prod-da domen bilan cheklasang bo'ladi
+    allow_origins=["*"],   # demo/prototype; prod-da domen bilan cheklash mumkin
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ---------- Utils ----------
+# --------- Utils ---------
 
 def pdf_to_base64(file_bytes: bytes) -> str:
     return base64.b64encode(file_bytes).decode("utf-8")
 
 
+def _normalize_waypoints_for_directions(
+    waypoints: Optional[List[str]],
+    add_via_prefix: bool = True,
+    max_points: int = 20,
+) -> List[str]:
+    """
+    Waypointlarni tozalash:
+    - bo'shlarini tashlab yuboradi
+    - takrorlarini olib tashlaydi
+    - kerak bo'lsa boshiga 'via:' qo'shib qo'yadi (Directions URL uchun)
+    """
+    if not waypoints:
+        return []
+
+    cleaned: List[str] = []
+    seen = set()
+
+    for w in waypoints:
+        if not w:
+            continue
+        w = w.strip()
+        if not w:
+            continue
+
+        if add_via_prefix:
+            if not w.lower().startswith("via:"):
+                w = f"via:{w}"
+
+        key = w.lower()
+        if key in seen:
+            continue
+
+        seen.add(key)
+        cleaned.append(w)
+
+        if len(cleaned) >= max_points:
+            break
+
+    return cleaned
+
+
 def build_google_maps_link(
     origin: str,
     destination: str,
-    waypoints: Optional[List[str]] = None,
     travel_mode: str = "driving",
+    waypoints: Optional[List[str]] = None,
 ) -> str:
     """
-    Google Maps URL: origin + destination + via:waypoints.
-    via: prefix => 'shu nuqta orqali majburiy o‘t' (short-cut yo‘q).
+    Google Maps Directions URL (foydalanuvchi bosadigan link).
+    - origin / destination – matn
+    - waypoints – "via:...." ko‘rinishidagi ro‘yxat (max ~20 ta)
     """
-    params: Dict[str, Any] = {
+    params = {
         "api": "1",
         "origin": origin,
         "destination": destination,
         "travelmode": travel_mode,
     }
 
-    via_points: List[str] = []
-    if waypoints:
-        for wp in waypoints:
-            wp = (wp or "").strip()
-            if wp:
-                via_points.append(f"via:{wp}")
+    cleaned = _normalize_waypoints_for_directions(
+        waypoints,
+        add_via_prefix=True,
+        max_points=20,
+    )
+    if cleaned:
+        # `via:...|via:...` ko‘rinishidagi qator
+        params["waypoints"] = "|".join(cleaned)
 
-    if via_points:
-        # Google &urlencode ichida ham to‘g‘ri ishlaydi
-        params["waypoints"] = "|".join(via_points)
-
-    return "https://www.google.com/maps/dir/?" + urlencode(params)
+    # safe="|:" – via: va | belgilarini URL-encoding qilmaslik uchun
+    return f"https://www.google.com/maps/dir/?{urlencode(params, safe='|:')}"
 
 
-def clean_gemini_text_to_json(text: str) -> dict:
+def build_google_maps_embed_url(
+    origin: str,
+    destination: str,
+    travel_mode: str = "driving",
+    waypoints: Optional[List[str]] = None,
+) -> Optional[str]:
     """
-    Gemini text -> JSON:
-    - ```json ... ``` bloklarni kesadi
-    - faqat { ... } orasini oladi
-    - json.loads qiladi
+    Google Maps Embed API (iframe uchun) Directions URL.
+    Bu yerda API KEY ishlatiladi va faqat backendda qoladi.
+    Frontend faqat `map_embed_url` ni oladi.
     """
-    if not text:
-        raise ValueError("empty gemini text")
+    if not HAS_EMBED_KEY:
+        return None
 
-    t = text.strip()
+    params: Dict[str, Any] = {
+        "key": GOOGLE_MAPS_EMBED_API_KEY,
+        "origin": origin,
+        "destination": destination,
+        "mode": travel_mode,
+    }
 
-    # ```json ... ``` bo'lishi mumkin
-    if t.startswith("```"):
-        lines = t.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        t = "\n".join(lines).strip()
+    # Embed Directions API uchun via: shart emas, shunchaki waypointlar yetarli
+    cleaned = _normalize_waypoints_for_directions(
+        waypoints,
+        add_via_prefix=False,  # bu yerda "via:" qo‘shmaymiz
+        max_points=20,
+    )
+    if cleaned:
+        # "Wichita Falls, TX|Childress, TX|..." kabi
+        params["waypoints"] = "|".join(cleaned)
 
-    start_idx = t.find("{")
-    end_idx = t.rfind("}")
-    if start_idx != -1 and end_idx != -1:
-        t = t[start_idx:end_idx + 1].strip()
+    # `|` belgisi saqlanib qolishi uchun safe="|"
+    return f"https://www.google.com/maps/embed/v1/directions?{urlencode(params, safe='|')}"
 
-    return json.loads(t)
-
-
-# ---------- Core LLM logic ----------
 
 async def analyze_route_with_gemini(
     start_address: str,
     end_address: str,
     permits: Optional[List[UploadFile]],
-) -> dict:
+) -> Dict[str, Any]:
     """
-    Advanced route-compliance mode.
-
-    0) Agar permits bo'lmasa:
-       - faqat adres bilan ishlaydi, LLM chaqirilmaydi.
-    1) Agar permits bo'lsa:
-       - ROUTE / MILES jadvali bo'yicha segmentlarni chiqaradi.
-       - Har bir highway / EXIT o'z segmentiga ega bo'ladi.
-       - waypoints = segmentlardagi gmaps_query’lar (tartib bilan).
-       - Google Maps link 'via:' waypoints bilan quriladi
-         (Google shortcut qilolmaydi).
+    Logika:
+    - Agar permits yo‘q:
+        - ikkala address ham bo‘lishi shart
+        - Gemini chaqirilmaydi.
+    - Agar permits mavjud:
+        - Gemini yo‘q bo‘lsa (API key bo‘lmasa) -> faqat addresslardan foydalanamiz.
+        - Aks holda:
+            - 15–20 ta permit PDF (multi-state, multi-segment) ni o‘qib:
+              origin / destination / waypoints / segments ni chiqaradi.
     """
 
     permits = permits or []
     start_address = (start_address or "").strip()
     end_address = (end_address or "").strip()
 
-    # --- 0) umuman permit yo'q -> faqat adreslar ---
+    # 1) Umuman permit yo‘q → to‘g‘ridan-to‘g‘ri address rejimi
     if not permits:
         if not (start_address and end_address):
             raise HTTPException(
@@ -141,7 +190,7 @@ async def analyze_route_with_gemini(
             "segments": [],
         }
 
-    # --- 1) permits bor, lekin GEMINI_API_KEY yo'q ---
+    # 2) Permits bor, lekin GEMINI yo‘q
     if not HAS_GEMINI:
         if not (start_address and end_address):
             raise HTTPException(
@@ -159,106 +208,109 @@ async def analyze_route_with_gemini(
             "segments": [],
         }
 
-    # --- 2) permits bor + Gemini bor -> full route extraction ---
+    # 3) Permits + GEMINI → to‘liq AI tahlil
     parts: List[dict] = []
+    any_pdf = False
 
+    # 🔥 Prompt – ROUTE + MILES + ketma-ketlik + to‘liq segmentlar
     prompt = f"""
-You are an expert oversize/overweight permit routing assistant.
+You are a senior logistics & dispatch assistant.
 
-You receive up to ~20 permit PDFs for one multi-state load.
-Each permit may contain:
-- Origin / Destination cities and states,
-- One or more ROUTE / MILES / DISTANCE tables
-  (columns like: Miles | Route | To, or similar).
+You receive up to ~20 permit PDF files (TX PERMIT, CO PERMIT, Rate Confirm, etc.)
+for ONE oversize/overweight load. Each permit describes ROUTE + MILES that the
+truck is ALLOWED to travel inside that jurisdiction.
 
-The user may optionally provide:
+User high-level input (optional):
 - Global starting address A1: "{start_address or "not provided"}"
 - Global final destination A2: "{end_address or "not provided"}"
 
-Your job is to FOLLOW THE PERMIT ROUTE TABLE(S) EXACTLY, not to optimize.
+CRITICAL REQUIREMENTS (read carefully):
 
-ROUTING RULES (VERY IMPORTANT):
-- The truck must follow the same highways, ramps and exits shown in the permit's
-  route table(s). This is COMPLIANCE, not shortest-path routing.
-- DO NOT choose shortcuts or alternative paths that are not in the route table.
-- Every time the table changes highway, changes direction, or changes from one
-  road to another (or to a ramp/exit), that is a NEW SEGMENT.
-- Use the Miles / Route / To (or equivalent) lines as the single source of truth.
-- If different permits describe consecutive states (e.g. ND -> SD -> IA),
-  join them into ONE continuous ordered sequence of segments.
-- If something is unclear and you cannot follow the permit exactly, you MUST
-  still try to infer the correct junction/exit using nearby cities and mileages.
-- Only if it is truly impossible to follow the permit, output an 'error'
-  field in the JSON explaining why.
+1) You MUST work from the PERMIT TEXT – ROUTE and MILES – not from your own idea
+   of a shortcut. Do NOT simplify or optimize the route.
+   - If the permit says: "US287 W → IH44 E → Exit 3A → US-287 N → ...", then your
+     route MUST follow exactly these highways and junctions in the correct order.
+   - The goal is to MATCH the permit's legal route, not the shortest one.
 
-MAPPING RULES:
-- Convert each segment into a Google Maps friendly search query that pins
-  the key junction/exit or small area where that segment ends.
-  Example (conceptual):
-    "I-80 WB (EXIT 16)" -> "I-80 W Exit 16 interchange with I-880 near Neola, IA"
-- Those search queries will be used as 'via:' waypoints in order, so Google
-  is forced to follow the permitted route instead of shortcuts.
-- Prefer 5–20 segments in total. If the table is extremely granular,
-  you may merge small consecutive lines on the SAME highway and direction,
-  but do NOT change the logical path.
+2) Build a single continuous route from A1 to A2 by stitching ALL relevant permits
+   in order (e.g., TX → OK → CO). Ignore any permit that clearly belongs to a
+   different, unrelated load.
 
-OUTPUT REQUIREMENTS:
-Return ONLY ONE JSON object with the following structure. Do not add markdown.
+3) For every segment, use the ROUTE and MILES lines to reconstruct the sequence:
+   Example skeleton:
+   - state: "TX"
+     route: "US287 W"
+     from: "US287 W [US81] [SH114] (RHOME TX)"
+     to:   "IH44 E [US277] [US281] [CENTRAL FREEWAY]"
+     miles: 90.0
 
-{{
-  "origin": "<Google Maps friendly origin, city/state or full address>",
-  "destination": "<Google Maps friendly destination, city/state or full address>",
-  "notes": "Short explanation of how you derived the route and which permits/states you used.",
-  "waypoints": [
-    "<gmaps search query for waypoint #1 in driving order>",
-    "<gmaps search query for waypoint #2>",
-    "... more in order from origin to destination ..."
-  ],
-  "segments": [
-    {{
-      "order": 1,
-      "state": "TX",
-      "route": "I-29 SB",
-      "from": "State border of South Dakota",
-      "to": "I-880 EB (EXIT 71)",
-      "miles": 10.5,
-      "gmaps_query": "I-880 E Exit 71 interchange with I-29 near Loveland, IA"
-    }},
-    {{
-      "order": 2,
-      "state": "IA",
-      "route": "I-880 EB",
-      "from": "I-29 SB",
-      "to": "I-80 WB (EXIT 16)",
-      "miles": 22.3,
-      "gmaps_query": "I-80 W Exit 16 near Neola, IA"
-    }}
-    // ... more segments in strict driving order ...
-  ]
-}}
+4) When the permit describes locations like:
+   - "5.0mi SE of SH114 & FM 718"
+   - "2.8mi from BOONE"
+   you MUST approximate them to a nearby Google Maps-friendly query, e.g.:
+   - "US-287 & SH-114 near Rhome, TX"
+   - "CO-96 near Boone, CO"
 
-ADDITIONAL RULES:
-- 'origin' and 'destination' should be the global start and end of the ENTIRE trip,
-  usually matching the first and last meaningful cities or addresses.
-  Use A1/A2 as hints; if they are clearly wrong, you may refine them.
-- 'waypoints' MUST list the segment.gmaps_query values in STRICT driving order from
-  origin to destination, WITHOUT re-ordering by yourself afterwards.
-- Do NOT include any keys other than: origin, destination, notes, waypoints, segments, error.
-- The JSON must be valid and parseable. If you truly cannot follow the permit
-  route, set "error": "cannot_generate_permit_exact_route: <reason>" and still
-  provide your best guess for origin/destination.
+5) OUTPUT FORMAT — IMPORTANT:
+   Return ONLY one JSON object, no markdown, no comments. It must be valid JSON:
+
+   {{
+     "origin": "<Google Maps friendly origin>",
+     "destination": "<Google Maps friendly destination>",
+     "notes": "short explanation of how you stitched the route from the permits",
+     "waypoints": [
+       "<short gmaps query for a junction/exit on the route in correct order>",
+       "... up to about 15–20 items max ..."
+     ],
+     "segments": [
+       {{
+         "order": 1,
+         "state": "TX",
+         "route": "US287 W",
+         "from": "<from description from permit>",
+         "to": "<to description from permit>",
+         "miles": 90.0,
+         "gmaps_query": "<short gmaps query near this segment>"
+       }},
+       {{
+         "order": 2,
+         "state": "TX",
+         "route": "IH44 E",
+         "from": "...",
+         "to": "...",
+         "miles": 2.4,
+         "gmaps_query": "IH-44 E near Wichita Falls, TX"
+       }}
+       // additional segments in strict travel order...
+     ]
+   }}
+
+   - "origin" should be the FIRST pickup / start city of the full trip, aligned
+     with A1 if A1 is reasonable.
+   - "destination" should be the FINAL delivery / end city of the full trip,
+     aligned with A2 if A2 is reasonable.
+   - "waypoints" must be in the correct travel order and represent key exits /
+     junctions / towns taken from the segments.
+   - "segments" must reflect the PERMIT's legal route in the correct order
+     including ROUTE + FROM + TO + MILES.
+
+6) The JSON MUST be syntactically valid:
+   - Use double quotes for keys and strings.
+   - No trailing commas.
+   - No comments.
+   - No ``` fences.
 """
 
     parts.append({"text": prompt})
 
-    any_pdf = False
+    # Har bir permit faylini qo‘shamiz
     for idx, permit in enumerate(permits, start=1):
         content = await permit.read()
         if not content:
             continue
+
         any_pdf = True
 
-        # Fayl nomi ko‘pincha state/yo‘l haqida hint beradi
         if permit.filename:
             parts.append({"text": f"FILE_{idx} name: {permit.filename}"})
 
@@ -298,59 +350,70 @@ ADDITIONAL RULES:
 
     url = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
 
-    async with httpx.AsyncClient(timeout=180) as client:
-        resp = await client.post(url, json=payload)
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(url, json=payload)
 
-    if resp.status_code != 200:
-        raise HTTPException(500, f"Gemini error: {resp.text}")
+    if r.status_code != 200:
+        raise HTTPException(500, f"Gemini error: {r.text}")
 
     try:
-        resp_json = resp.json()
+        resp_json = r.json()
         raw_text = resp_json["candidates"][0]["content"]["parts"][0]["text"]
     except Exception:
-        raise HTTPException(500, f"Gemini response format is invalid: {resp.text}")
+        raise HTTPException(500, f"Gemini response format is invalid: {r.text}")
+
+    # ```json ... ``` bo‘lsa, tozalab olamiz
+    text = raw_text.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    start_idx = text.find("{")
+    end_idx = text.rfind("}")
+    if start_idx != -1 and end_idx != -1:
+        text = text[start_idx : end_idx + 1].strip()
 
     try:
-        data = clean_gemini_text_to_json(raw_text)
+        data = json.loads(text)
     except Exception as e:
-        raise HTTPException(500, f"Gemini did not return valid JSON: {e}")
-
-    # Agar LLM “error” qaytarsa, baribir foydali narsasini ishlatamiz
-    error_msg = (data.get("error") or "").strip() if isinstance(data, dict) else ""
+        raise HTTPException(
+            500,
+            f"Gemini did not return valid JSON: {e}. Raw text: {text}",
+        )
 
     origin = (data.get("origin") or start_address).strip()
     destination = (data.get("destination") or end_address).strip()
-    notes = (data.get("notes") or "").strip()
+    notes = (data.get("notes") or "").strip() or \
+        "Origin/destination were determined from permits (ROUTE+MILES) and user input."
 
-    if not notes:
-        notes = "Origin/destination and route were derived from the permit route tables and user input."
+    waypoints = data.get("waypoints") or []
+    if not isinstance(waypoints, list):
+        waypoints = []
 
-    # waypoints: ro‘yxat bo‘lsa – ishlatamiz, bo‘lmasa bo‘sh
-    waypoints_raw = data.get("waypoints")
-    waypoints: List[str] = []
-    if isinstance(waypoints_raw, list):
-        for wp in waypoints_raw:
-            if isinstance(wp, str) and wp.strip():
-                waypoints.append(wp.strip())
+    segments = data.get("segments") or []
+    if not isinstance(segments, list):
+        segments = []
 
-    # segments: ro‘yxat bo‘lsa – pass-through, aks holda bo‘sh
-    segments_raw = data.get("segments")
-    segments: List[dict] = []
-    if isinstance(segments_raw, list):
-        for seg in segments_raw:
-            if isinstance(seg, dict):
-                segments.append(seg)
+    # Agar waypoints bo‘sh bo‘lsa, segmentlardan yig‘ib olamiz
+    if not waypoints and segments:
+        try:
+            segments_sorted = sorted(
+                segments,
+                key=lambda s: s.get("order", 0)
+            )
+        except Exception:
+            segments_sorted = segments
 
-    # Minimal himoya: origin/destination topilmasa – bu ishlamaydi
-    if not origin or not destination:
-        raise HTTPException(
-            500,
-            f"Could not determine origin/destination from permits and addresses. LLM error: {error_msg or 'unknown'}",
-        )
-
-    if error_msg:
-        # Izohga qo‘shib yuboramiz, lekin baribir yo‘lni beramiz
-        notes = f"[LLM warning: {error_msg}] {notes}"
+        tmp: List[str] = []
+        for seg in segments_sorted:
+            q = (seg.get("gmaps_query") or "").strip()
+            if q:
+                tmp.append(q)
+        waypoints = tmp
 
     return {
         "origin": origin,
@@ -362,7 +425,7 @@ ADDITIONAL RULES:
     }
 
 
-# ---------- API route ----------
+# --------- API route ---------
 
 @app.post("/api/generate-navigation-link")
 async def generate_navigation_link(
@@ -372,17 +435,11 @@ async def generate_navigation_link(
     permits: Optional[List[UploadFile]] = File(None),
 ):
     """
-    Request:
+    Accepts:
     - start_address (optional)
     - end_address (optional)
-    - travel_mode: driving|walking|bicycling|transit
+    - travel_mode: driving|walking|bicycling|transit (default: driving)
     - permits: 0..N PDF files (15–20+ segments supported)
-
-    Response:
-    - success, origin, destination, notes
-    - google_maps_link (with via:waypoints)
-    - travel_mode, used_gemini
-    - waypoints[] (ordered), segments[] (full table)
     """
 
     allowed_modes = {"driving", "walking", "bicycling", "transit"}
@@ -395,14 +452,18 @@ async def generate_navigation_link(
     origin = (data.get("origin") or "").strip()
     destination = (data.get("destination") or "").strip()
     notes = (data.get("notes") or "").strip()
-    waypoints: List[str] = data.get("waypoints") or []
-    segments: List[dict] = data.get("segments") or []
     used_gemini = bool(data.get("used_gemini"))
+    waypoints = data.get("waypoints") or []
+    segments = data.get("segments") or []
 
     if not origin or not destination:
-        raise HTTPException(500, "Could not determine origin/destination from analysis result.")
+        raise HTTPException(500, f"Could not determine origin/destination: {data}")
 
-    link = build_google_maps_link(origin, destination, waypoints=waypoints, travel_mode=travel_mode)
+    # Foydalanuvchi bosadigan classic directions link
+    link = build_google_maps_link(origin, destination, travel_mode, waypoints)
+
+    # iframe uchun Embed API URL (agar kalit bo'lsa)
+    embed_url = build_google_maps_embed_url(origin, destination, travel_mode, waypoints)
 
     return JSONResponse(
         {
@@ -411,9 +472,19 @@ async def generate_navigation_link(
             "destination": destination,
             "notes": notes,
             "google_maps_link": link,
+            "map_embed_url": embed_url,  # 🔥 frontend shu bilan ishlaydi
             "travel_mode": travel_mode,
             "used_gemini": used_gemini,
             "waypoints": waypoints,
             "segments": segments,
         }
     )
+
+
+GOOGLE_MAPS_JS_API_KEY = os.getenv("MAPS_API_KEY")
+
+@app.get("/api/config")
+def get_config():
+    return {
+        "google_maps_js_api_key": GOOGLE_MAPS_JS_API_KEY
+    }
