@@ -9,7 +9,7 @@
 </head>
 <body class="min-h-full bg-slate-950 text-slate-50">
   <div class="min-h-screen flex items-center justify-center px-4 py-10">
-    <!-- 🔥 Kengaytirilgan container: max-w-[1400px] -->
+    <!-- 🔥 Kengaytirilgan container -->
     <div class="w-full max-w-[1400px] grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)] gap-6">
       <!-- LEFT: Header + Form + Result text -->
       <div class="bg-slate-900/80 border border-slate-700 rounded-2xl shadow-2xl shadow-blue-500/20 p-6 md:p-8 flex flex-col">
@@ -233,6 +233,27 @@
                   </div>
                 </div>
 
+                <!-- SEGMENTS -->
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between">
+                    <p class="text-[11px] uppercase tracking-wide text-slate-400">
+                      Segments (permit route)
+                    </p>
+                    <span
+                      id="segments-count"
+                      class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300"
+                    >
+                      0
+                    </span>
+                  </div>
+                  <div
+                    id="segments-list"
+                    class="max-h-40 overflow-auto rounded-lg border border-slate-700/70 bg-slate-950/40 p-2 space-y-1 text-[11px]"
+                  >
+                    <p class="text-slate-500">No segments yet.</p>
+                  </div>
+                </div>
+
                 <div class="mt-2 flex flex-wrap gap-2">
                   <a
                     id="maps-link"
@@ -290,14 +311,6 @@
     </div>
   </div>
 
-  <!-- JS (o‘zgarmagan) -->
-  <script>
-    /* shu yerga avvalgi JS’ingni o‘sha-o‘sha qoldirasan – faqat container’lar kengaydi */
-  </script>
-</body>
-</html>
-
-
   <script>
     const startTextInput = document.getElementById("start-text");
     const endTextInput = document.getElementById("end-text");
@@ -322,6 +335,9 @@
 
     const waypointsList = document.getElementById("waypoints-list");
     const waypointsCount = document.getElementById("waypoints-count");
+
+    const segmentsList = document.getElementById("segments-list");
+    const segmentsCount = document.getElementById("segments-count");
 
     const mapWrapper = document.getElementById("map-wrapper");
     const mapFrame = document.getElementById("map-frame");
@@ -396,6 +412,9 @@
       waypointsCount.textContent = "0";
       waypointsList.innerHTML = '<span class="text-slate-500">No waypoints yet.</span>';
 
+      segmentsCount.textContent = "0";
+      segmentsList.innerHTML = '<p class="text-slate-500">No segments yet.</p>';
+
       resultCard.classList.add("hidden");
       emptyState.classList.remove("hidden");
 
@@ -469,7 +488,7 @@
       try {
         // NOTE: change this URL if backend lives elsewhere
         const res = await fetch("https://nav-api.misterdev.uz/api/generate-navigation-link", {
-        //   const res = await fetch("http://127.0.0.1:8003/api/generate-navigation-link", {
+        // const res = await fetch("http://127.0.0.1:8003/api/generate-navigation-link", {
           method: "POST",
           body: formData,
         });
@@ -522,6 +541,77 @@
             '<span class="text-slate-500">No waypoints detected – direct route.</span>';
         }
 
+        // Segments rendering (permit route table)
+        const segs = Array.isArray(data.segments) ? data.segments.slice() : [];
+        segmentsList.innerHTML = "";
+        if (segs.length) {
+          // order bo'yicha sort
+          segs.sort((a, b) => (a.order || 0) - (b.order || 0));
+          segmentsCount.textContent = segs.length;
+
+          segs.forEach((seg) => {
+            const row = document.createElement("div");
+            row.className =
+              "flex items-start gap-2 rounded-md bg-slate-900/70 border border-slate-700/60 px-2 py-1";
+
+            const badge = document.createElement("span");
+            badge.className =
+              "mt-[1px] inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-800 text-[10px] text-slate-200";
+            badge.textContent = seg.order ?? "?";
+
+            const body = document.createElement("div");
+            body.className = "flex-1 space-y-0.5";
+
+            const topLine = document.createElement("div");
+            topLine.className = "flex flex-wrap items-center gap-1";
+            const state = (seg.state || "").toString().trim();
+            const route = (seg.route || "").toString().trim();
+            if (state) {
+              const s = document.createElement("span");
+              s.className =
+                "inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-800/80 text-[10px] text-slate-200 border border-slate-600/70";
+              s.textContent = state;
+              topLine.appendChild(s);
+            }
+            if (route) {
+              const r = document.createElement("span");
+              r.className = "text-[11px] font-medium text-slate-100";
+              r.textContent = route;
+              topLine.appendChild(r);
+            }
+
+            const midLine = document.createElement("div");
+            midLine.className = "text-[11px] text-slate-300";
+            const from = (seg.from || "").toString().trim();
+            const to = (seg.to || "").toString().trim();
+            midLine.textContent = from && to ? `${from} → ${to}` : from || to || "";
+
+            const bottomLine = document.createElement("div");
+            bottomLine.className = "flex flex-wrap items-center gap-2 text-[10px] text-slate-400";
+            if (typeof seg.miles === "number" || seg.miles) {
+              const mi = document.createElement("span");
+              mi.textContent = `Miles: ${seg.miles}`;
+              bottomLine.appendChild(mi);
+            }
+            if (seg.gmaps_query) {
+              const gq = document.createElement("span");
+              gq.textContent = seg.gmaps_query;
+              bottomLine.appendChild(gq);
+            }
+
+            body.appendChild(topLine);
+            if (from || to) body.appendChild(midLine);
+            if (bottomLine.childNodes.length) body.appendChild(bottomLine);
+
+            row.appendChild(badge);
+            row.appendChild(body);
+            segmentsList.appendChild(row);
+          });
+        } else {
+          segmentsCount.textContent = "0";
+          segmentsList.innerHTML = '<p class="text-slate-500">No segments from permits.</p>';
+        }
+
         emptyState.classList.add("hidden");
         resultCard.classList.remove("hidden");
 
@@ -556,7 +646,7 @@
       handleSubmit();
     });
 
-    // Enter bosilganda ham submit qilish (faqat form ichida emasligi uchun qo'lda)
+    // Enter bosilganda ham submit
     [startTextInput, endTextInput].forEach((input) => {
       input.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
