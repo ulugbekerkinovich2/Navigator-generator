@@ -946,7 +946,8 @@ function loadGoogleMapsScript(apiKey) {
 
 async function bootstrapGoogleMaps() {
   try {
-    const res = await fetch("http://127.0.0.1:8003/api/config");
+    // const res = await fetch("http://127.0.0.1:8003/api/config");
+    const res = await fetch("https://nav-api.misterdev.uz/api/config");
     if (!res.ok) throw new Error("Config endpoint error");
     const cfg = await res.json();
     // Backenddan masalan: { "google_maps_js_api_key": "XXX" } keladi
