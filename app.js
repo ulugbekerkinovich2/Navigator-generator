@@ -750,7 +750,7 @@ async function handleSubmit() {
 
   try {
     const res = await fetch(
-      "http://127.0.0.1:8003/api/generate-navigation-link",
+      "https://nav-api.misterdev.uz/api/generate-navigation-link",
       {
         method: "POST",
         body: formData,
