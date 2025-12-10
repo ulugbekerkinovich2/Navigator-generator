@@ -1,30 +1,3 @@
-// function buildGoogleMapsDirUrl(origin, destination, waypoints, travelMode) {
-//   origin = (origin || "").trim();
-//   destination = (destination || "").trim();
-//   if (!origin || !destination) return null;
-
-//   const params = new URLSearchParams({
-//     api: "1",
-//     origin,
-//     destination,
-//     travelmode: (travelMode || "driving").toLowerCase(),
-//   });
-
-//   if (Array.isArray(waypoints) && waypoints.length) {
-//     const cleaned = waypoints
-//       .map((w) => (w || "").toString().trim())
-//       .filter(Boolean)
-//       .slice(0, 20)
-//       .map((w) => w.replace(/^via:/i, ""));
-
-//     if (cleaned.length) {
-//       params.set("waypoints", cleaned.join("|"));
-//     }
-//   }
-
-//   return `https://www.google.com/maps/dir/?${params.toString()}`;
-// }
-
 // // ===== Google Maps JS API globals =====
 // let map;
 // let directionsService;
@@ -69,17 +42,16 @@
 
 // let currentTravelMode = "driving";
 
-// // ===== Map init (Google callback buni chaqiradi) =====
+// // ===== Google Maps init (HTML script'dagi callback) =====
 // window.initMap = function () {
-//   // HTML: <div id="map-canvas" class="w-full h-full"></div>
-//   const mapEl = document.getElementById("map-canvas");
-//   if (!mapEl) {
-//     console.error("Map element #map-canvas topilmadi");
+//   const canvas = document.getElementById("map-canvas");
+//   if (!canvas) {
+//     console.error("Map canvas element (#map-canvas) topilmadi.");
 //     return;
 //   }
 
-//   map = new google.maps.Map(mapEl, {
-//     center: { lat: 39.5, lng: -98.35 },
+//   map = new google.maps.Map(canvas, {
+//     center: { lat: 39.5, lng: -98.35 }, // US markazi
 //     zoom: 4,
 //     mapTypeId: google.maps.MapTypeId.ROADMAP,
 //   });
@@ -90,12 +62,58 @@
 //     suppressMarkers: false,
 //     preserveViewport: false,
 //     polylineOptions: {
-//       strokeColor: "#22c55e", // yashil chiziq
+//       strokeColor: "#22c55e", // yashil
 //       strokeOpacity: 0.9,
 //       strokeWeight: 4,
 //     },
 //   });
 // };
+
+// // ===== Google Maps Directions URL (Open in Google Maps uchun) =====
+// function buildGoogleMapsDirUrlFromData(data, fallbackTravelMode) {
+//   const origin = (data.origin || "").trim();
+//   const destination = (data.destination || "").trim();
+//   if (!origin || !destination) return null;
+
+//   const wps = Array.isArray(data.waypoints) ? data.waypoints : [];
+//   const segs = Array.isArray(data.segments) ? data.segments : [];
+
+//   const segPoints = segs
+//     .map((s) => (s.gmaps_query || "").toString().trim())
+//     .filter(Boolean);
+
+//   const allPoints = [...wps, ...segPoints]
+//     .map((w) => (w || "").toString().trim())
+//     .filter(Boolean);
+
+//   // Agar shaping points bo'lmasa ham, hech bo'lmasa oddiy origin→destination bo'lsin
+//   if (!allPoints.length) {
+//     const base = new URLSearchParams({
+//       api: "1",
+//       origin,
+//       destination,
+//       travelmode: (data.travel_mode || fallbackTravelMode || "driving").toLowerCase(),
+//     });
+//     return `https://www.google.com/maps/dir/?${base.toString()}`;
+//   }
+
+//   // Unique va cheklangan waypointlar
+//   const unique = Array.from(new Set(allPoints));
+//   const waypointParam = unique
+//     .slice(0, 20)
+//     .map((p) => `via:${p}`)
+//     .join("|");
+
+//   const params = new URLSearchParams({
+//     api: "1",
+//     origin,
+//     destination,
+//     travelmode: (data.travel_mode || fallbackTravelMode || "driving").toLowerCase(),
+//     waypoints: waypointParam,
+//   });
+
+//   return `https://www.google.com/maps/dir/?${params.toString()}`;
+// }
 
 // // ===== helpers =====
 
@@ -219,7 +237,7 @@
 //   });
 // });
 
-// // ===== Directions chizish (JS API) =====
+// // ===== Directions chizish (JS API preview) =====
 // function drawRouteOnMap(data, fallbackTravelMode) {
 //   if (!window.google || !map || !directionsService || !directionsRenderer) {
 //     console.warn("Google Maps JS API hali tayyor emas.");
@@ -296,7 +314,7 @@
 
 //   try {
 //     const res = await fetch(
-//       "http://127.0.0.1:8003/api/generate-navigation-link",
+//       "http://127.0.0.1:8004/api/generate-navigation-link",
 //       {
 //         method: "POST",
 //         body: formData,
@@ -320,21 +338,20 @@
 //       throw new Error(data.detail || "Server error.");
 //     }
 
-//     originText.textContent = data.origin || "-";
-//     destinationText.textContent = data.destination || "-";
+//     // Textlar
+//     originText.textContent = data.origin || start || "-";
+//     destinationText.textContent = data.destination || end || "-";
 //     notesText.textContent = data.notes || "";
 
-//     // External Google Maps link – frontendan qayta quramiz
-//     const dirUrl = buildGoogleMapsDirUrl(
-//       data.origin || start,
-//       data.destination || end,
-//       data.waypoints || [],
-//       data.travel_mode || currentTravelMode
-//     );
+//     // 🔗 External Google Maps link – preview'dagi route'ga yaqin qilib
+//     const dirUrl = buildGoogleMapsDirUrlFromData(data, currentTravelMode);
+//     const finalLink = dirUrl || data.google_maps_link || "#";
+//     mapsLink.href = finalLink;
 
-//     mapsLink.href = dirUrl || data.google_maps_link || "#";
+//     const hasRealLink = !!dirUrl || !!data.google_maps_link;
+//     copyLinkBtn.disabled = !hasRealLink;
 
-//     // LLMBadge (endi to'g'ri id bilan)
+//     // LLMBadge
 //     if (data.used_gemini === true) {
 //       llmBadge.textContent = "LLM: Gemini (permits used)";
 //       llmBadge.classList.remove("hidden");
@@ -343,11 +360,11 @@
 //       llmBadge.classList.remove("hidden");
 //     }
 
-//     // Waypoints
+//     // Waypoints rendering
 //     const wps = Array.isArray(data.waypoints) ? data.waypoints : [];
 //     waypointsList.innerHTML = "";
 //     if (wps.length) {
-//       waypointsCount.textContent = String(wps.length);
+//       waypointsCount.textContent = wps.length;
 //       wps.forEach((wp, idx) => {
 //         const chip = document.createElement("span");
 //         chip.className =
@@ -363,12 +380,12 @@
 //         '<span class="text-slate-500">No waypoints detected – direct route.</span>';
 //     }
 
-//     // Segments
+//     // Segments rendering
 //     const segs = Array.isArray(data.segments) ? data.segments.slice() : [];
 //     segmentsList.innerHTML = "";
 //     if (segs.length) {
 //       segs.sort((a, b) => (a.order || 0) - (b.order || 0));
-//       segmentsCount.textContent = String(segs.length);
+//       segmentsCount.textContent = segs.length;
 
 //       segs.forEach((seg) => {
 //         const row = document.createElement("div");
@@ -439,10 +456,7 @@
 //     emptyState.classList.add("hidden");
 //     resultCard.classList.remove("hidden");
 
-//     // Copy buttonni Google Maps linkiga qarab yoqamiz
-//     copyLinkBtn.disabled = !mapsLink.href || mapsLink.href === "#";
-
-//     // 🔥 Asosiy joy: route chizish
+//     // 🔥 Asosiy joy: map preview
 //     drawRouteOnMap(data, currentTravelMode);
 //   } catch (err) {
 //     console.error(err);
@@ -479,14 +493,7 @@
 //     // ignore
 //   }
 // });
-
-
-// ===== Google Maps JS API globals =====
-let map;
-let directionsService;
-let directionsRenderer;
-
-// UI elementlar
+// ===== UI elementlar =====
 const startTextInput = document.getElementById("start-text");
 const endTextInput = document.getElementById("end-text");
 const permitsInput = document.getElementById("permits");
@@ -525,35 +532,7 @@ const travelModeButtons = document.querySelectorAll(".travel-mode-btn");
 
 let currentTravelMode = "driving";
 
-// ===== initMap — Google callback =====
-window.initMap = function () {
-  const canvas = document.getElementById("map-canvas");
-  if (!canvas) {
-    console.error("map-canvas element not found");
-    return;
-  }
-
-  map = new google.maps.Map(canvas, {
-    center: { lat: 39.5, lng: -98.35 },
-    zoom: 4,
-    mapTypeId: google.maps.MapTypeId.ROADMAP,
-  });
-
-  directionsService = new google.maps.DirectionsService();
-  directionsRenderer = new google.maps.DirectionsRenderer({
-    map,
-    suppressMarkers: false,
-    preserveViewport: false,
-    polylineOptions: {
-      strokeColor: "#22c55e",
-      strokeOpacity: 0.9,
-      strokeWeight: 4,
-    },
-  });
-};
-
-// ===== helpers =====
-
+// ===== helper: file tags =====
 function renderFileTags() {
   fileTags.innerHTML = "";
   const files = Array.from(permitsInput.files || []);
@@ -620,9 +599,7 @@ function resetForm() {
   resultCard.classList.add("hidden");
   emptyState.classList.remove("hidden");
 
-  if (directionsRenderer) {
-    directionsRenderer.setDirections({ routes: [] });
-  }
+  // Map previewni faqat UI tomondan tozalaymiz
   mapWrapper.classList.add("hidden");
   mapEmpty.classList.remove("hidden");
 
@@ -635,7 +612,7 @@ clearBtn.addEventListener("click", (e) => {
   resetForm();
 });
 
-// Advanced options toggle
+// ===== Advanced options (travel mode) =====
 toggleAdvancedBtn.addEventListener("click", () => {
   const isHidden = advancedPanel.classList.contains("hidden");
   advancedPanel.classList.toggle("hidden", !isHidden);
@@ -645,7 +622,6 @@ toggleAdvancedBtn.addEventListener("click", () => {
     : "Show advanced options";
 });
 
-// Travel mode pills
 travelModeButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     currentTravelMode = btn.dataset.mode || "driving";
@@ -672,54 +648,6 @@ travelModeButtons.forEach((btn) => {
       currentTravelMode.charAt(0).toUpperCase() + currentTravelMode.slice(1);
   });
 });
-
-// ===== Directions chizish (JS API) =====
-function drawRouteOnMap(data, fallbackTravelMode) {
-  if (!window.google || !map || !directionsService || !directionsRenderer) {
-    console.warn("Google Maps JS API is not ready yet.");
-    return;
-  }
-
-  const origin = (data.origin || "").trim();
-  const destination = (data.destination || "").trim();
-  if (!origin || !destination) return;
-
-  const wps = Array.isArray(data.waypoints) ? data.waypoints : [];
-  const waypointObjects = wps
-    .slice(0, 20)
-    .map((w) => (w || "").toString().trim())
-    .filter(Boolean)
-    .map((w) => ({
-      location: w.replace(/^via:/i, ""),
-      stopover: true,
-    }));
-
-  const modeKey = (data.travel_mode || fallbackTravelMode || "driving")
-    .toString()
-    .toUpperCase();
-  const travelMode =
-    google.maps.TravelMode[modeKey] || google.maps.TravelMode.DRIVING;
-
-  const request = {
-    origin,
-    destination,
-    waypoints: waypointObjects,
-    travelMode,
-    optimizeWaypoints: false,
-  };
-
-  directionsService.route(request, (result, status) => {
-    if (status === "OK") {
-      directionsRenderer.setDirections(result);
-      mapEmpty.classList.add("hidden");
-      mapWrapper.classList.remove("hidden");
-    } else {
-      console.error("Directions request failed:", status);
-      mapWrapper.classList.add("hidden");
-      mapEmpty.classList.remove("hidden");
-    }
-  });
-}
 
 // ===== Submit handler =====
 async function handleSubmit() {
@@ -750,7 +678,7 @@ async function handleSubmit() {
 
   try {
     const res = await fetch(
-      "https://nav-api.misterdev.uz/api/generate-navigation-link",
+      "http://127.0.0.1:8004/api/generate-navigation-link",
       {
         method: "POST",
         body: formData,
@@ -774,12 +702,16 @@ async function handleSubmit() {
       throw new Error(data.detail || "Server error.");
     }
 
-    originText.textContent = data.origin || "-";
-    destinationText.textContent = data.destination || "-";
+    // ==== Text result ====
+    originText.textContent = data.origin || start || "-";
+    destinationText.textContent = data.destination || end || "-";
     notesText.textContent = data.notes || "";
 
+    // ==== Open in Google Maps link ====
     mapsLink.href = data.google_maps_link || "#";
+    copyLinkBtn.disabled = !data.google_maps_link;
 
+    // LLM badge
     if (data.used_gemini === true) {
       llmBadge.textContent = "LLM: Gemini (permits used)";
       llmBadge.classList.remove("hidden");
@@ -884,10 +816,15 @@ async function handleSubmit() {
     emptyState.classList.add("hidden");
     resultCard.classList.remove("hidden");
 
-    copyLinkBtn.disabled = !data.google_maps_link;
-
-    // Preview — polyline
-    drawRouteOnMap(data, currentTravelMode);
+    // ==== Preview: JS API (agar app1.js yuklangan bo'lsa) ====
+    if (typeof window.drawRouteOnMap === "function") {
+      window.drawRouteOnMap(
+        { ...data, travel_mode: currentTravelMode },
+        currentTravelMode
+      );
+    } else {
+      console.warn("drawRouteOnMap is not defined (app1.js yuklanganmi?)");
+    }
   } catch (err) {
     console.error(err);
     errorBox.textContent = err.message || "Unknown error occurred.";
@@ -922,40 +859,3 @@ copyLinkBtn.addEventListener("click", async () => {
     // ignore
   }
 });
-
-// ===== GOOGLE MAPS SCRIPTNI DYNAMIC ULASH (.env → backend → config) =====
-function loadGoogleMapsScript(apiKey) {
-  if (!apiKey) {
-    console.error("Google Maps JS API key is missing in config.");
-    return;
-  }
-  const existing = document.querySelector(
-    'script[data-role="gmap-js-loader"]'
-  );
-  if (existing) return;
-
-  const script = document.createElement("script");
-  script.dataset.role = "gmap-js-loader";
-  script.async = true;
-  script.defer = true;
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
-    apiKey
-  )}&callback=initMap`;
-  document.head.appendChild(script);
-}
-
-async function bootstrapGoogleMaps() {
-  try {
-    // const res = await fetch("http://127.0.0.1:8003/api/config");
-    const res = await fetch("https://nav-api.misterdev.uz/api/config");
-    if (!res.ok) throw new Error("Config endpoint error");
-    const cfg = await res.json();
-    // Backenddan masalan: { "google_maps_js_api_key": "XXX" } keladi
-    loadGoogleMapsScript(cfg.google_maps_js_api_key);
-  } catch (err) {
-    console.error("Failed to load Google Maps config:", err);
-  }
-}
-
-// Sahifa load bo‘lishi bilan config + script
-bootstrapGoogleMaps();
